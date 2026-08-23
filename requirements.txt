@@ -1,0 +1,10 @@
+fastapi>=0.115
+uvicorn[standard]>=0.30
+python-multipart>=0.0.9
+trimesh>=5.0
+manifold3d>=3.0
+numpy
+scipy
+networkx
+shapely
+pytest

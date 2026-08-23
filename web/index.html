@@ -1,0 +1,137 @@
+<!doctype html>
+<html lang="es">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>STLFiles — cortá tus modelos en piezas</title>
+  <link rel="stylesheet" href="./style.css" />
+  <script type="importmap">
+    {
+      "imports": {
+        "three": "./vendor/three.module.js",
+        "three/addons/controls/OrbitControls.js": "./vendor/OrbitControls.js",
+        "three/addons/loaders/STLLoader.js": "./vendor/STLLoader.js"
+      }
+    }
+  </script>
+</head>
+<body>
+  <div id="app">
+    <aside id="panel">
+      <header class="brand">
+        <h1>STL<span>Files</span></h1>
+        <p class="tagline">Splitter de modelos estilo MeshMixer</p>
+      </header>
+
+      <section class="card">
+        <h2>1 · Modelo</h2>
+        <label id="drop" class="dropzone" for="file-input">
+          <input type="file" id="file-input" accept=".stl" hidden />
+          <strong>Subí tu .stl</strong>
+          <span>click para elegir archivo</span>
+        </label>
+        <div id="model-card" class="model-info hidden">
+          <p id="m-name" class="m-name"></p>
+          <dl>
+            <div><dt>Medidas</dt><dd id="m-dims"></dd></div>
+            <div><dt>Volumen</dt><dd id="m-vol"></dd></div>
+            <div><dt>Triángulos</dt><dd id="m-tris"></dd></div>
+            <div><dt>Estanco</dt><dd id="m-wat"></dd></div>
+          </dl>
+        </div>
+      </section>
+
+      <section class="card" id="cut-card">
+        <h2>2 · Corte</h2>
+
+        <div class="row modes">
+          <label class="radio-pill">
+            <input type="radio" name="mode" value="half" checked />
+            <span>Mitad (plano)</span>
+          </label>
+          <label class="radio-pill">
+            <input type="radio" name="mode" value="multi" />
+            <span>Varias partes</span>
+          </label>
+        </div>
+
+        <div class="field" id="field-axis">
+          <span class="lbl">Eje del plano</span>
+          <div class="seg">
+            <button type="button" data-axis="x">X</button>
+            <button type="button" data-axis="y">Y</button>
+            <button type="button" data-axis="z" class="active">Z</button>
+          </div>
+        </div>
+
+        <div class="field" id="field-pos">
+          <label class="lbl" for="pos-slider">
+            Posición del plano <output id="pos-val">50%</output>
+          </label>
+          <input type="range" id="pos-slider" min="2" max="98" value="50" />
+        </div>
+
+        <div class="field hidden" id="field-parts">
+          <label class="lbl" for="parts-input">Cantidad de partes (2–16)</label>
+          <input type="number" id="parts-input" min="2" max="16" value="4" />
+          <p class="hint">Se divide recursivamente por el eje más largo de cada pieza.</p>
+        </div>
+
+        <hr />
+        <h3>Conectores de encastre</h3>
+        <div class="field">
+          <label class="lbl" for="conn-type">Forma</label>
+          <select id="conn-type">
+            <option value="none">Sin conectores</option>
+            <option value="pin" selected>Cilindro (pin + agujero)</option>
+            <option value="prism">Prisma (espiga cuadrada)</option>
+          </select>
+        </div>
+        <div id="conn-fields">
+          <div class="grid2">
+            <div class="field">
+              <label class="lbl" for="conn-dia">Diámetro/lado (mm)</label>
+              <input type="number" id="conn-dia" min="2" max="30" step="0.5" value="6" />
+            </div>
+            <div class="field">
+              <label class="lbl" for="conn-count">Cantidad por corte</label>
+              <input type="number" id="conn-count" min="1" max="8" value="2" />
+            </div>
+            <div class="field">
+              <label class="lbl" for="conn-depth">Profundidad enchufe (mm)</label>
+              <input type="number" id="conn-depth" min="2" max="40" step="0.5" value="8" />
+            </div>
+            <div class="field">
+              <label class="lbl" for="conn-clear">Holgura (mm)</label>
+              <input type="number" id="conn-clear" min="0" max="1" step="0.05" value="0.25" />
+            </div>
+          </div>
+          <p class="hint">El agujero se agranda según la holgura para que encaje impreso en FDM.</p>
+        </div>
+
+        <button id="btn-cut" class="primary" disabled>Cortar modelo</button>
+      </section>
+
+      <section class="card hidden" id="results-card">
+        <h2>3 · Piezas</h2>
+        <ul id="results-list"></ul>
+        <a id="zip-btn" class="secondary" download>⬇ Descargar todo (.zip)</a>
+        <div id="warnings" class="warnings hidden"></div>
+      </section>
+    </aside>
+
+    <main id="viewport">
+      <canvas id="c"></canvas>
+      <div id="hud" class="hidden">
+        <button id="btn-original" class="ghost hidden">Ver original</button>
+        <div id="explode-box" class="hidden">
+          <span>Separamiento</span>
+          <input type="range" id="explode-slider" min="0" max="80" value="25" />
+        </div>
+      </div>
+      <div id="toast" class="hidden"></div>
+    </main>
+  </div>
+  <script type="module" src="./app.js"></script>
+</body>
+</html>
