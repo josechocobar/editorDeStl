@@ -134,7 +134,7 @@ function loadOriginal(url) {
 let suggestTimer = null;
 
 async function fetchSuggestion() {
-  if (!state.modelId || $("conn-type").value === "none") return;
+  if (!state.modelId || currentOp() !== "cut" || $("conn-type").value === "none") return;
   try {
     const params = new URLSearchParams({
       axis: state.axis,
@@ -164,7 +164,7 @@ function scheduleSuggestion() {
 const AXIS_VEC = { x: [1, 0, 0], y: [0, 1, 0], z: [0, 0, 1] };
 
 function updatePlanePreview() {
-  if (!state.originalMesh || currentMode() !== "half") {
+  if (!state.originalMesh || currentOp() !== "cut" || currentMode() !== "half") {
     planePreview.visible = false;
     return;
   }
@@ -248,6 +248,37 @@ function currentMode() {
   return document.querySelector('input[name="mode"]:checked').value;
 }
 
+function currentOp() {
+  return document.querySelector('input[name="op"]:checked').value;
+}
+
+function supportsPayload() {
+  return {
+    enabled: true,
+    angle: Number($("sup-angle").value),
+    tip_diameter: Number($("sup-tip").value),
+    contact_diameter: Number($("sup-contact").value),
+    spacing: Number($("sup-spacing").value),
+    z_gap: Number($("sup-gap").value),
+    base_thickness: Number($("sup-base").value),
+  };
+}
+
+function updateOperationUI() {
+  const cutting = currentOp() === "cut";
+  $("cut-controls").classList.toggle("hidden", !cutting);
+  $("sup-toggle-field").classList.toggle("hidden", !cutting);
+  $("sup-fields").classList.toggle("hidden", cutting ? !$("sup-enabled").checked : false);
+  $("btn-cut").textContent = cutting ? "Cortar modelo" : "Generar soportes";
+  if (!cutting) planePreview.visible = false;
+  updatePlanePreview();
+  if (cutting) fetchSuggestion();
+}
+
+document.querySelectorAll('input[name="op"]').forEach((r) =>
+  r.addEventListener("change", updateOperationUI)
+);
+
 document.querySelectorAll('input[name="mode"]').forEach((r) =>
   r.addEventListener("change", () => {
     const half = currentMode() === "half";
@@ -281,7 +312,7 @@ $("conn-type").addEventListener("change", () => {
 });
 
 $("sup-enabled").addEventListener("change", () => {
-  $("sup-fields").classList.toggle("hidden", !$("sup-enabled").checked);
+  updateOperationUI();
 });
 
 $("file-input").addEventListener("change", (e) => {
@@ -303,53 +334,57 @@ dropzone.addEventListener("drop", (e) => {
 
 $("btn-cut").addEventListener("click", async () => {
   const btn = $("btn-cut");
+  const op = currentOp();
+  const cutting = op === "cut";
   btn.disabled = true;
-  btn.textContent = "Cortando…";
+  btn.textContent = cutting ? "Cortando…" : "Generando soportes…";
   try {
-    const body = {
-      model_id: state.modelId,
-      mode: currentMode(),
-      axis: state.axis,
-      position: Number($("pos-slider").value) / 100,
-      parts: Number($("parts-input").value),
-      connector: {
-        type: $("conn-type").value,
-        diameter: Number($("conn-dia").value),
-        depth: Number($("conn-depth").value),
-        clearance: Number($("conn-clear").value),
-        count: Number($("conn-count").value),
-      },
-      supports: $("sup-enabled").checked
-        ? {
-            enabled: true,
-            angle: Number($("sup-angle").value),
-            tip_diameter: Number($("sup-tip").value),
-            contact_diameter: Number($("sup-contact").value),
-            spacing: Number($("sup-spacing").value),
-            z_gap: Number($("sup-gap").value),
-            base_thickness: Number($("sup-base").value),
-          }
-        : null,
-    };
-    const res = await fetch("/api/cut", {
+    let url, body;
+    if (cutting) {
+      url = "/api/cut";
+      body = {
+        model_id: state.modelId,
+        mode: currentMode(),
+        axis: state.axis,
+        position: Number($("pos-slider").value) / 100,
+        parts: Number($("parts-input").value),
+        connector: {
+          type: $("conn-type").value,
+          diameter: Number($("conn-dia").value),
+          depth: Number($("conn-depth").value),
+          clearance: Number($("conn-clear").value),
+          count: Number($("conn-count").value),
+        },
+        supports: $("sup-enabled").checked ? supportsPayload() : null,
+      };
+    } else {
+      url = `/api/models/${state.modelId}/supports`;
+      body = supportsPayload();
+    }
+    const res = await fetch(url, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify(body),
     });
     const data = await res.json();
-    if (!res.ok) throw new Error(data.detail || "Error cortando");
+    if (!res.ok) throw new Error(data.detail || "Error procesando");
     state.job = data;
     renderResults(data);
-    toast(`${data.pieces.length} piezas generadas`);
+    toast(cutting
+      ? `${data.pieces.length} piezas generadas`
+      : "STL con soportes listo para descargar");
   } catch (err) {
     toast(String(err.message || err), "error");
   } finally {
     btn.disabled = false;
-    btn.textContent = "Cortar modelo";
+    btn.textContent = cutting ? "Cortar modelo" : "Generar soportes";
   }
 });
 
 function renderResults(job) {
+  $("results-title").textContent = job.pieces.length > 1 || currentOp() === "cut"
+    ? "3 · Piezas"
+    : "3 · Resultado";
   const list = $("results-list");
   list.innerHTML = "";
   job.pieces.forEach((p, i) => {
@@ -410,7 +445,7 @@ function showPieces(job) {
   });
 
   $("hud").classList.remove("hidden");
-  $("explode-box").classList.remove("hidden");
+  $("explode-box").classList.toggle("hidden", job.pieces.length < 2);
   $("btn-original").classList.remove("hidden");
 }
 
@@ -447,7 +482,7 @@ $("btn-original").addEventListener("click", () => {
   if (showingPieces) {
     state.pieceMeshes.forEach((m) => (m.visible = false));
     if (state.originalMesh) state.originalMesh.visible = true;
-    planePreview.visible = currentMode() === "half";
+    planePreview.visible = currentOp() === "cut" && currentMode() === "half";
     $("btn-original").textContent = "Ver piezas";
     if (state.originalMesh) fitCamera(state.originalMesh);
   } else {

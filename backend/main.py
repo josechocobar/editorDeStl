@@ -50,14 +50,17 @@ class ConnectorSpec(BaseModel):
     count: int = Field(default=2, ge=1, le=8)
 
 
-class SupportsSpec(BaseModel):
-    enabled: bool = False
+class SupportsParams(BaseModel):
     angle: float = Field(default=50.0, ge=20, le=80)
     tip_diameter: float = Field(default=0.8, gt=0.2, le=4)
     contact_diameter: float = Field(default=0.5, gt=0.2, le=3)
     spacing: float = Field(default=1.8, gt=0.5, le=8)
     z_gap: float = Field(default=0.2, ge=0, le=2)
     base_thickness: float = Field(default=1.2, ge=0.4, le=6)
+
+
+class SupportsSpec(SupportsParams):
+    enabled: bool = False
 
 
 class CutRequest(BaseModel):
@@ -176,6 +179,66 @@ def suggest_connector(
     return {**sug, "basis": hint}
 
 
+def _export_job(pieces, names, base, operation, *, request_dump=None,
+                splits=None, supports_meta=None, warnings=None):
+    """Exporta las piezas como job y arma el meta común a las operaciones."""
+    job_id = uuid.uuid4().hex[:12]
+    job_dir = JOBS_DIR / job_id
+    job_dir.mkdir(parents=True, exist_ok=True)
+
+    out_pieces = []
+    for i, piece in enumerate(pieces):
+        piece_path = job_dir / f"{i}.stl"
+        piece.export(piece_path)
+        lo, hi = piece.bounds
+        out_pieces.append({
+            "index": i,
+            "name": names[i],
+            "file_url": f"/api/jobs/{job_id}/pieces/{i}",
+            "dims_mm": [round(float(e), 2) for e in (hi - lo)],
+            "volume_cm3": round(abs(piece.volume) / 1000.0, 2),
+            "watertight": bool(piece.is_watertight),
+        })
+
+    job_meta = {
+        "job_id": job_id,
+        "operation": operation,
+        "model_name": base,
+        "request": request_dump or {},
+        "pieces": out_pieces,
+        "splits": splits if splits is not None else [],
+        "supports": supports_meta or [],
+        "warnings": warnings or [],
+    }
+    (job_dir / "meta.json").write_text(json.dumps(job_meta))
+    return job_meta
+
+
+@app.post("/api/models/{model_id}/supports")
+def add_model_supports(model_id: str, spec: SupportsParams):
+    """Aplica soportes árbol al modelo completo (sin cortar) y devuelve un
+    job de una sola pieza lista para descargar."""
+    stl_path, meta_path = _model_paths(model_id)
+    meta = json.loads(meta_path.read_text())
+    try:
+        mesh = mesh_ops.load_mesh(stl_path)
+        supported, sup_info = supports.add_supports(mesh, spec.model_dump())
+    except supports.SupportError as exc:
+        raise HTTPException(422, str(exc)) from exc
+    except ValueError as exc:
+        raise HTTPException(400, str(exc)) from exc
+    logger.info("soportes modelo %s: %d puntas, %d ramas",
+                model_id, sup_info["tips"], sup_info["branches"])
+    base = _slug(meta.get("name") or "modelo")
+    job_meta = _export_job(
+        [supported], [f"{base}_con_soportes.stl"], base, "soportes",
+        request_dump={"model_id": model_id, **spec.model_dump()},
+        supports_meta=[{"index": 0, **sup_info}],
+    )
+    logger.info("job %s listo: modelo con soportes", job_meta["job_id"])
+    return job_meta
+
+
 @app.post("/api/cut")
 def cut_model(req: CutRequest):
     stl_path, meta_path = _model_paths(req.model_id)
@@ -238,37 +301,17 @@ def cut_model(req: CutRequest):
                 warnings.append(f"Soportes omitidos en pieza {i + 1}: {exc}")
                 logger.warning("soportes fallaron en pieza %d: %s", i, exc)
 
-    job_id = uuid.uuid4().hex[:12]
-    job_dir = JOBS_DIR / job_id
-    job_dir.mkdir(parents=True, exist_ok=True)
-
-    out_pieces = []
     base = _slug(meta.get("name") or "modelo")
-    for i, piece in enumerate(pieces):
-        name = f"{base}_pieza_{i + 1}_de_{len(pieces)}.stl"
-        piece_path = job_dir / f"{i}.stl"
-        piece.export(piece_path)
-        lo, hi = piece.bounds
-        out_pieces.append({
-            "index": i,
-            "name": name,
-            "file_url": f"/api/jobs/{job_id}/pieces/{i}",
-            "dims_mm": [round(float(e), 2) for e in (hi - lo)],
-            "volume_cm3": round(abs(piece.volume) / 1000.0, 2),
-            "watertight": bool(piece.is_watertight),
-        })
-
-    job_meta = {
-        "job_id": job_id,
-        "model_name": meta.get("name"),
-        "request": req.model_dump(),
-        "pieces": out_pieces,
-        "splits": splits,
-        "supports": supports_meta,
-        "warnings": warnings,
-    }
-    (job_dir / "meta.json").write_text(json.dumps(job_meta))
-    logger.info("job %s listo: %d piezas, %d avisos", job_id, len(pieces), len(warnings))
+    names = [f"{base}_pieza_{i + 1}_de_{len(pieces)}.stl" for i in range(len(pieces))]
+    job_meta = _export_job(
+        pieces, names, base, "corte",
+        request_dump=req.model_dump(),
+        splits=splits,
+        supports_meta=supports_meta,
+        warnings=warnings,
+    )
+    logger.info("job %s listo: %d piezas, %d avisos",
+                job_meta["job_id"], len(pieces), len(warnings))
     return job_meta
 
 
@@ -305,17 +348,20 @@ def get_job_zip(job_id: str):
     if not meta_path.exists():
         raise HTTPException(404, "Job no encontrado")
     meta = json.loads(meta_path.read_text())
+    operation = meta.get("operation", "corte")
+    info_name = "corte_info.json" if operation == "corte" else f"{operation}_info.json"
     buf = io.BytesIO()
     with zipfile.ZipFile(buf, "w", zipfile.ZIP_DEFLATED) as zf:
         for p in meta["pieces"]:
             zf.write(job_dir / f"{p['index']}.stl", p["name"])
-        zf.writestr("corte_info.json", json.dumps(meta, indent=2, ensure_ascii=False))
+        zf.writestr(info_name, json.dumps(meta, indent=2, ensure_ascii=False))
     buf.seek(0)
     safe_name = (meta.get("model_name") or "modelo").rsplit(".", 1)[0]
+    suffix = "piezas" if operation == "corte" else operation
     return Response(
         content=buf.getvalue(),
         media_type="application/zip",
-        headers={"Content-Disposition": f'attachment; filename="{safe_name}_piezas.zip"'},
+        headers={"Content-Disposition": f'attachment; filename="{safe_name}_{suffix}.zip"'},
     )
 
 
