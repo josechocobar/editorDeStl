@@ -1,5 +1,16 @@
+# Python
 __pycache__/
 *.pyc
-data/
-venv/
 .pytest_cache/
+venv/
+.venv/
+
+# Runtime local (uploads, jobs, previews cache)
+data/
+
+# Entorno y secretos
+.env
+
+# SO y editor
+.DS_Store
+*.log
