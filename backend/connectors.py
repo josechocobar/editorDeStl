@@ -17,63 +17,72 @@ def _plane_basis(normal):
     return u, v, n
 
 
-def _row_positions(lo, hi, k, diameter, gap):
-    span = hi - lo
-    needed = k * diameter + (k - 1) * gap
-    if needed > span:
-        return None
-    if k == 1:
-        return [(lo + hi) / 2]
-    step = (span - diameter) / (k - 1)
-    return [lo + diameter / 2 + i * step for i in range(k)]
+def _contains(mesh, point):
+    try:
+        return bool(mesh.contains([point])[0])
+    except Exception:
+        return False
 
 
-def compute_sites(piece, origin, normal, count, diameter):
-    verts = piece.vertices
-    dist = np.abs((verts - origin) @ normal)
-    span = float(np.max(piece.extents))
+def compute_sites(piece_male, piece_female, origin, normal, count, diameter, depth=8.0):
+    dist = np.abs((piece_male.vertices - origin) @ normal)
+    span = float(np.max(piece_male.extents))
     eps = span * 0.02
-    near = verts[dist < eps]
-    if len(near) < 4:
+    near = piece_male.vertices[dist < eps]
+    if len(near) < 3:
         raise ConnectorError("La cara de corte es demasiado chica para colocar conectores")
 
     u, v, n = _plane_basis(normal)
     pu = (near - origin) @ u
     pv = (near - origin) @ v
-    margin = diameter / 2.0 + 1.5
-    gap = diameter * 0.6
+    margin = diameter / 2.0 + 1.2
     lo_u, hi_u = float(pu.min()) + margin, float(pu.max()) - margin
     lo_v, hi_v = float(pv.min()) + margin, float(pv.max()) - margin
-    wu, wv = hi_u - lo_u, hi_v - lo_v
 
-    candidates = [
-        (np.linspace(lo_v, hi_v, 1), _row_positions(lo_u, hi_u, count, diameter, gap)),
-        (_row_positions(lo_v, hi_v, count, diameter, gap), np.linspace(lo_u, hi_u, 1)),
-    ]
-    cols = int(np.ceil(np.sqrt(count)))
-    rows = int(np.ceil(count / cols))
-    if cols > 1 and rows > 1:
-        candidates.append(
-            (
-                _row_positions(lo_v, hi_v, rows, diameter, gap),
-                _row_positions(lo_u, hi_u, cols, diameter, gap),
-            )
+    embed = min(2.0, depth * 0.4)
+    step = max(diameter * 1.25, 1.0)
+
+    def axis_points(lo, hi):
+        span = hi - lo
+        if hi <= lo:
+            return []
+        if span <= diameter:
+            return [(lo + hi) / 2]
+        k = int(span // step) + 1
+        return [float(x) for x in np.linspace(lo + diameter / 2,
+                                              hi - diameter / 2, k)]
+
+    su_vals = axis_points(lo_u, hi_u)
+    sv_vals = axis_points(lo_v, hi_v)
+    if not su_vals or not sv_vals:
+        raise ConnectorError(
+            f"No entra un conector de {diameter:.1f} mm en la cara útil de "
+            f"{hi_u - lo_u:.1f} x {hi_v - lo_v:.1f} mm"
         )
 
-    for vs, us in candidates:
-        if us is None or vs is None:
-            continue
-        sites = []
-        for sv in vs:
-            for su in us:
-                if len(sites) < count:
-                    sites.append(origin + su * u + sv * v)
-        return sites
+    valid = []
+    for sv in sv_vals:
+        for su in su_vals:
+            base = origin + su * u + sv * v
+            probe_male = base - n * (embed * 0.5)
+            probe_female = base + n * (depth * 0.5)
+            if _contains(piece_male, probe_male) and _contains(piece_female, probe_female):
+                valid.append(base)
 
-    raise ConnectorError(
-        f"No entran {count} conectores de {diameter:.1f} mm en la cara útil "
-        f"de {wu:.1f} x {wv:.1f} mm; probá menos cantidad o menor diámetro"
-    )
+    min_dist = diameter * 1.7
+    chosen = []
+    for cand in valid:
+        if all(float(np.linalg.norm(cand - c)) >= min_dist for c in chosen):
+            chosen.append(cand)
+            if len(chosen) >= count:
+                break
+
+    if not chosen:
+        raise ConnectorError(
+            f"Ningún punto de la cara de corte tiene material en ambas piezas "
+            f"para un conector de {diameter:.1f} mm"
+        )
+    return chosen
 
 
 def _pin_primitive(site, normal, kind, width, length, sections=48):

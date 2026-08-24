@@ -57,14 +57,16 @@ def test_pin_connector_watertight_and_fits():
     origin = np.array([0.0, 0.0, 0.0])
     normal = np.array([0.0, 0.0, 1.0])
 
-    sites = connectors.compute_sites(high, origin, normal, count=2,
-                                     diameter=6.0)
+    sites = connectors.compute_sites(low, high, origin, normal, count=2,
+                                     diameter=6.0, depth=8.0)
     assert len(sites) == 2
     dist = np.linalg.norm(sites[0] - sites[1])
     assert dist >= 6.0
     for s in sites:
         assert abs(s[0]) < 18 and abs(s[1]) < 18
         assert abs(s[2]) < 1e-6
+        assert connectors._contains(low, s - normal * 0.8)
+        assert connectors._contains(high, s + normal * 4.0)
 
     pin_added, hole_cut, info = connectors.apply_connector(
         low, high, origin, normal, sites,
@@ -77,13 +79,19 @@ def test_pin_connector_watertight_and_fits():
     assert info["pin_len_mm"] == pytest.approx(2 + 8 * 0.85, abs=0.01)
 
 
-def test_sites_reject_when_count_does_not_fit():
+def test_sites_return_fewer_when_spaced_out():
     box = trimesh.creation.box(extents=[40, 40, 20])
-    half = trimesh.intersections.slice_mesh_plane(box, [0, 0, -1], [0, 0, 0], cap=True)
+    low = trimesh.intersections.slice_mesh_plane(box, [0, 0, -1], [0, 0, 0], cap=True)
+    high = trimesh.intersections.slice_mesh_plane(box, [0, 0, 1], [0, 0, 0], cap=True)
     origin = np.array([0.0, 0.0, 0.0])
     normal = np.array([0.0, 0.0, 1.0])
-    with pytest.raises(connectors.ConnectorError):
-        connectors.compute_sites(half, origin, normal, count=8, diameter=12.0)
+    sites = connectors.compute_sites(low, high, origin, normal,
+                                     count=8, diameter=12.0, depth=8.0)
+    assert 1 <= len(sites) < 8
+    min_dist = 12.0 * 1.7
+    for i, a in enumerate(sites):
+        for b in sites[i + 1:]:
+            assert np.linalg.norm(a - b) >= min_dist
 
 
 def test_prism_connector_works():
@@ -92,7 +100,8 @@ def test_prism_connector_works():
     high = trimesh.intersections.slice_mesh_plane(box, [0, 0, 1], [0, 0, 0], cap=True)
     origin = np.array([0.0, 0.0, 0.0])
     normal = np.array([0.0, 0.0, 1.0])
-    sites = connectors.compute_sites(low, origin, normal, count=3, diameter=8.0)
+    sites = connectors.compute_sites(low, high, origin, normal, count=3,
+                                     diameter=8.0, depth=10.0)
     pin_added, hole_cut, _ = connectors.apply_connector(
         low, high, origin, normal, sites,
         kind="prism", diameter=8.0, depth=10.0, clearance=0.3)
@@ -102,23 +111,93 @@ def test_prism_connector_works():
 
 def test_connector_sites_inset_from_edges():
     box = trimesh.creation.box(extents=[40, 40, 20])
-    half = trimesh.intersections.slice_mesh_plane(box, [0, 0, -1], [0, 0, 0], cap=True)
+    low = trimesh.intersections.slice_mesh_plane(box, [0, 0, -1], [0, 0, 0], cap=True)
+    high = trimesh.intersections.slice_mesh_plane(box, [0, 0, 1], [0, 0, 0], cap=True)
     origin = np.array([0.0, 0.0, 0.0])
     normal = np.array([0.0, 0.0, 1.0])
-    sites = connectors.compute_sites(half, origin, normal, count=2, diameter=6.0)
+    sites = connectors.compute_sites(low, high, origin, normal, count=2,
+                                     diameter=6.0, depth=8.0)
     assert len(sites) == 2
-    limit = 20.0 - (6.0 / 2.0 + 1.5)
+    limit = 20.0 - (6.0 / 2.0 + 1.2)
     for s in sites:
         assert abs(s[0]) <= limit + 1e-6 and abs(s[1]) <= limit + 1e-6
 
 
 def test_connector_on_tiny_face_raises():
     tiny = trimesh.creation.box(extents=[6, 6, 30])
-    half = trimesh.intersections.slice_mesh_plane(tiny, [0, 0, -1], [0, 0, 0], cap=True)
+    low = trimesh.intersections.slice_mesh_plane(tiny, [0, 0, -1], [0, 0, 0], cap=True)
+    high = trimesh.intersections.slice_mesh_plane(tiny, [0, 0, 1], [0, 0, 0], cap=True)
     origin = np.array([0.0, 0.0, 0.0])
     normal = np.array([0.0, 0.0, 1.0])
     with pytest.raises(connectors.ConnectorError):
-        connectors.compute_sites(half, origin, normal, count=2, diameter=6.0)
+        connectors.compute_sites(low, high, origin, normal, count=2,
+                                 diameter=6.0, depth=8.0)
+
+
+def _make_L():
+    stem = trimesh.creation.box(extents=[15, 60, 20])
+    stem.apply_translation([-12.5, 0, 0])
+    foot = trimesh.creation.box(extents=[40, 15, 20])
+    foot.apply_translation([0, -22.5, 0])
+    return trimesh.boolean.union([stem, foot], engine="manifold")
+
+
+def test_L_sites_only_on_shared_material():
+    L = _make_L()
+    pieces, splits = mesh_ops.cut_half(L, "x", 0.5)
+    low, high = pieces[0], pieces[1]
+    origin = np.array(splits[0]["origin"])
+    normal = np.array(splits[0]["normal"])
+
+    sites = connectors.compute_sites(low, high, origin, normal,
+                                     count=4, diameter=6.0, depth=8.0)
+    assert 1 <= len(sites) <= 4
+    for s in sites:
+        assert abs(s[0]) < 1e-6
+        assert -26.8 < s[1] < -16.2
+        assert connectors._contains(low, s - normal * 0.8)
+        assert connectors._contains(high, s + normal * 4.0)
+
+
+def test_L_smaller_pins_fit_more_sites():
+    L = _make_L()
+    pieces, splits = mesh_ops.cut_half(L, "x", 0.5)
+    low, high = pieces[0], pieces[1]
+    origin = np.array(splits[0]["origin"])
+    normal = np.array(splits[0]["normal"])
+    sites_big = connectors.compute_sites(low, high, origin, normal,
+                                         count=4, diameter=6.0, depth=8.0)
+    sites_small = connectors.compute_sites(low, high, origin, normal,
+                                           count=4, diameter=3.0, depth=8.0)
+    assert len(sites_small) > len(sites_big)
+    min_dist = 3.0 * 1.7
+    for i, a in enumerate(sites_small):
+        for b in sites_small[i + 1:]:
+            assert np.linalg.norm(a - b) >= min_dist
+
+
+def test_L_end_to_end_no_floating_pins():
+    L = _make_L()
+    pieces, splits = mesh_ops.cut_half(L, "x", 0.5)
+    low, high = pieces
+    origin = np.array(splits[0]["origin"])
+    normal = np.array(splits[0]["normal"])
+    sites = connectors.compute_sites(low, high, origin, normal,
+                                     count=2, diameter=6.0, depth=8.0)
+    macho, hembra, info = connectors.apply_connector(
+        low, high, origin, normal, sites,
+        kind="pin", diameter=6.0, depth=8.0, clearance=0.25)
+    assert macho.is_watertight and hembra.is_watertight
+    assert abs(macho.volume) > abs(low.volume)
+    assert abs(hembra.volume) < abs(high.volume)
+
+    embed = info["embed_mm"]
+    protrusion = info["pin_len_mm"] - embed
+    for s in sites:
+        assert connectors._contains(macho, s + normal * (protrusion * 0.5))
+        assert not connectors._contains(macho, s + normal * (protrusion + 1.0))
+        assert not connectors._contains(hembra, s + normal * 2.0)
+        assert connectors._contains(hembra, s + normal * 9.5)
 
 
 def test_split_multi_annular_section_box_with_hole():

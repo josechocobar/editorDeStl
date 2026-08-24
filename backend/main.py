@@ -137,12 +137,18 @@ def cut_model(req: CutRequest):
             normal = np.array(split["normal"])
             try:
                 sites = connectors.compute_sites(
-                    pieces[a_idx], origin, normal, spec.count, spec.diameter
+                    pieces[a_idx], pieces[b_idx], origin, normal,
+                    spec.count, spec.diameter, spec.depth,
                 )
                 pieces[a_idx], pieces[b_idx], conn_meta = connectors.apply_connector(
                     pieces[a_idx], pieces[b_idx], origin, normal,
                     sites, spec.type, spec.diameter, spec.depth, spec.clearance,
                 )
+                if len(sites) < spec.count:
+                    warnings.append(
+                        f"Corte {a_idx + 1}-{b_idx + 1}: se ubicaron {len(sites)} de "
+                        f"{spec.count} conectores (material compartido insuficiente en la cara)"
+                    )
                 split["connector"] = {
                     "type": spec.type,
                     "sites_mm": [[round(float(c), 2) for c in s] for s in sites],
