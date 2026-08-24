@@ -72,3 +72,20 @@ def test_supports_endpoint_validates_params():
     client = TestClient(app)
     resp = client.post("/api/models/abc123/supports", json={"angle": 500})
     assert resp.status_code == 422
+
+
+def test_supports_accepts_minimum_contact_diameter_from_ui():
+    from fastapi.testclient import TestClient
+
+    from backend.main import app
+
+    client = TestClient(app)
+    up = client.post(
+        "/api/models",
+        files={"file": ("esfera_test.stl", _sphere_bytes(), "model/stl")},
+    )
+    model_id = up.json()["id"]
+    resp = client.post(
+        f"/api/models/{model_id}/supports", json={"contact_diameter": 0.2}
+    )
+    assert resp.status_code == 200, resp.text

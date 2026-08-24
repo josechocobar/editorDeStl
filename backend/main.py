@@ -53,7 +53,7 @@ class ConnectorSpec(BaseModel):
 class SupportsParams(BaseModel):
     angle: float = Field(default=50.0, ge=20, le=80)
     tip_diameter: float = Field(default=0.8, gt=0.2, le=4)
-    contact_diameter: float = Field(default=0.5, gt=0.2, le=3)
+    contact_diameter: float = Field(default=0.5, ge=0.2, le=3)
     spacing: float = Field(default=1.8, gt=0.5, le=8)
     z_gap: float = Field(default=0.2, ge=0, le=2)
     base_thickness: float = Field(default=1.2, ge=0.4, le=6)
