@@ -9,7 +9,7 @@ from pathlib import Path
 from typing import Literal, Optional
 
 import numpy as np
-from fastapi import FastAPI, File, HTTPException, UploadFile
+from fastapi import FastAPI, File, HTTPException, Query, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse, Response
 from fastapi.staticfiles import StaticFiles
@@ -150,7 +150,7 @@ def get_model_preview(model_id: str):
 def suggest_connector(
     model_id: str,
     axis: Literal["x", "y", "z"] = "z",
-    position: float = Field(default=0.5, ge=0.02, le=0.98),
+    position: float = Query(default=0.5, ge=0.02, le=0.98),
     mode: Literal["half", "multi"] = "half",
 ):
     stl_path, _ = _model_paths(model_id)
