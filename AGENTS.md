@@ -14,7 +14,8 @@ Backend Python + frontend vanilla sin build step.
 ```
 backend/
   main.py         FastAPI. Endpoints REST + montaje estático de web/.
-                  Modelos pydantic: ConnectorSpec, SupportsSpec, CutRequest.
+                  Modelos pydantic: ConnectorSpec, SupportsParams/SupportsSpec,
+                  CutRequest; helper _export_job (persistencia de jobs).
   mesh_ops.py     Carga/corte de mallas: load_mesh, model_info,
                   decimate_for_preview (previews livianos), plane_for,
                   cut_half (slice + cap), split_multi (recursivo kd).
@@ -26,15 +27,16 @@ backend/
                   (voladizos por normales), build_support_solids (columnas
                   que bajan, se fusionan, base común), add_supports (union).
 web/
-  index.html      Panel: 1·Modelo (dropzone) 2·Corte (eje/pos/conectores/
-                  soportes) 3·Piezas (resultados + zip). Viewport + HUD.
+  index.html      Panel: 1·Modelo (dropzone) 2·Operación (Cortar en piezas |
+                  Solo soportes; corte: eje/pos/conectores/soportes)
+                  3·Piezas|Resultado (resultados + zip). Viewport + HUD.
   app.js          Three.js: escena `world` rotada -90° en X (Z-up modelo vs
                   Y-up escena), updatePlanePreview (dimensiones por eje, ver
-                  problemas/), upload/cut flows, explode slider, sugerencia
-                  de conectores (fetchSuggestion con debounce 300ms).
+                  problemas/), upload/cut/supports flows, explode slider,
+                  sugerencia de conectores (fetchSuggestion con debounce).
   vendor/         three.module.js vendoreado (offline).
 tests/            pytest. test_mesh_ops.py (corte/conectores/suggest),
-                  test_supports.py (soportes).
+                  test_supports.py (soportes), test_api_smoke.py (rutas + e2e).
 samples/          STLs de prueba (caja_con_agujero, esfera, letra_L).
 data/             Runtime: models/ (STL+meta json), jobs/ (piezas por job).
 docs/             investigacion-soportes.md (tipos + reglas vinculantes R1-R10)
@@ -48,9 +50,10 @@ BITACORA.md       Historial de construcción, errores y lecciones (E1, E2...).
 POST /api/models                      upload STL → id + medidas
 GET  /api/models/{id}/preview         STL decimado (cache .preview.stl)
 GET  /api/models/{id}/suggest-connector   sugerencia pin según cara de corte
+POST /api/models/{id}/supports        soportes al modelo entero → job 1 pieza
 POST /api/cut                         corte → job {pieces, splits, warnings}
 GET  /api/jobs/{job}/pieces/{i}       STL pieza (+ /preview decimado)
-GET  /api/jobs/{job}/zip              zip piezas + corte_info.json
+GET  /api/jobs/{job}/zip              zip piezas + {corte|soportes}_info.json
 ```
 
 ## Convenciones (no negociables)
