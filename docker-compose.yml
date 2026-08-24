@@ -6,7 +6,7 @@ services:
       context: .
       dockerfile: Dockerfile
     ports:
-      - "8321:8321"
+      - "${STLFILES_PORT:-8321}:8321"
     volumes:
-      - ./data:/app/data
+      - ${STLFILES_DATA:-./data}:/app/data
     restart: unless-stopped
