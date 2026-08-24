@@ -42,18 +42,30 @@
       </section>
 
       <section class="card" id="cut-card">
-        <h2>2 · Corte</h2>
+        <h2>2 · Operación</h2>
 
         <div class="row modes">
           <label class="radio-pill">
-            <input type="radio" name="mode" value="half" checked />
-            <span>Mitad (plano)</span>
+            <input type="radio" name="op" value="cut" checked />
+            <span>Cortar en piezas</span>
           </label>
           <label class="radio-pill">
-            <input type="radio" name="mode" value="multi" />
-            <span>Varias partes</span>
+            <input type="radio" name="op" value="supports" />
+            <span>Solo soportes</span>
           </label>
         </div>
+
+        <div id="cut-controls">
+          <div class="row modes">
+            <label class="radio-pill">
+              <input type="radio" name="mode" value="half" checked />
+              <span>Mitad (plano)</span>
+            </label>
+            <label class="radio-pill">
+              <input type="radio" name="mode" value="multi" />
+              <span>Varias partes</span>
+            </label>
+          </div>
 
         <div class="field" id="field-axis">
           <span class="lbl">Eje del plano</span>
@@ -109,10 +121,11 @@
           <p class="hint" id="conn-suggest" hidden></p>
           <p class="hint">El agujero se agranda según la holgura para que encaje impreso en FDM.</p>
         </div>
+        </div>
 
         <hr />
         <h3>Soportes para minis</h3>
-        <div class="field">
+        <div class="field" id="sup-toggle-field">
           <label class="radio-pill">
             <input type="checkbox" id="sup-enabled" />
             <span>Agregar soportes árbol</span>
@@ -152,7 +165,7 @@
       </section>
 
       <section class="card hidden" id="results-card">
-        <h2>3 · Piezas</h2>
+        <h2 id="results-title">3 · Piezas</h2>
         <ul id="results-list"></ul>
         <a id="zip-btn" class="secondary" download>⬇ Descargar todo (.zip)</a>
         <div id="warnings" class="warnings hidden"></div>
