@@ -227,6 +227,9 @@ def add_model_supports(model_id: str, spec: SupportsParams):
         raise HTTPException(422, str(exc)) from exc
     except ValueError as exc:
         raise HTTPException(400, str(exc)) from exc
+    except Exception as exc:
+        logger.exception("fallo la generación de soportes de %s", model_id)
+        raise HTTPException(500, f"Error procesando la malla: {exc}") from exc
     logger.info("soportes modelo %s: %d puntas, %d ramas",
                 model_id, sup_info["tips"], sup_info["branches"])
     base = _slug(meta.get("name") or "modelo")

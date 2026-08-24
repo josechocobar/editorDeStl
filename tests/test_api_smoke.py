@@ -89,3 +89,23 @@ def test_supports_accepts_minimum_contact_diameter_from_ui():
         f"/api/models/{model_id}/supports", json={"contact_diameter": 0.2}
     )
     assert resp.status_code == 200, resp.text
+
+
+def test_supports_endpoint_returns_informative_500(monkeypatch):
+    from fastapi.testclient import TestClient
+
+    from backend import main as m
+
+    def boom(*args, **kwargs):
+        raise RuntimeError("manifold explotó")
+
+    monkeypatch.setattr(m.supports, "add_supports", boom)
+    client = TestClient(m.app)
+    up = client.post(
+        "/api/models",
+        files={"file": ("esfera_test.stl", _sphere_bytes(), "model/stl")},
+    )
+    model_id = up.json()["id"]
+    resp = client.post(f"/api/models/{model_id}/supports", json={})
+    assert resp.status_code == 500
+    assert "manifold explotó" in resp.json()["detail"]
