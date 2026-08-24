@@ -280,6 +280,10 @@ $("conn-type").addEventListener("change", () => {
   fetchSuggestion();
 });
 
+$("sup-enabled").addEventListener("change", () => {
+  $("sup-fields").classList.toggle("hidden", !$("sup-enabled").checked);
+});
+
 $("file-input").addEventListener("change", (e) => {
   if (e.target.files[0]) upload(e.target.files[0]);
 });
@@ -315,6 +319,17 @@ $("btn-cut").addEventListener("click", async () => {
         clearance: Number($("conn-clear").value),
         count: Number($("conn-count").value),
       },
+      supports: $("sup-enabled").checked
+        ? {
+            enabled: true,
+            angle: Number($("sup-angle").value),
+            tip_diameter: Number($("sup-tip").value),
+            contact_diameter: Number($("sup-contact").value),
+            spacing: Number($("sup-spacing").value),
+            z_gap: Number($("sup-gap").value),
+            base_thickness: Number($("sup-base").value),
+          }
+        : null,
     };
     const res = await fetch("/api/cut", {
       method: "POST",

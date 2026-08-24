@@ -110,6 +110,44 @@
           <p class="hint">El agujero se agranda según la holgura para que encaje impreso en FDM.</p>
         </div>
 
+        <hr />
+        <h3>Soportes para minis</h3>
+        <div class="field">
+          <label class="radio-pill">
+            <input type="checkbox" id="sup-enabled" />
+            <span>Agregar soportes árbol</span>
+          </label>
+        </div>
+        <div id="sup-fields" class="hidden">
+          <div class="grid2">
+            <div class="field">
+              <label class="lbl" for="sup-angle">Ángulo voladizo (°)</label>
+              <input type="number" id="sup-angle" min="20" max="80" step="1" value="50" />
+            </div>
+            <div class="field">
+              <label class="lbl" for="sup-tip">Punta Ø (mm)</label>
+              <input type="number" id="sup-tip" min="0.3" max="4" step="0.1" value="0.8" />
+            </div>
+            <div class="field">
+              <label class="lbl" for="sup-contact">Contacto Ø (mm)</label>
+              <input type="number" id="sup-contact" min="0.2" max="3" step="0.1" value="0.5" />
+            </div>
+            <div class="field">
+              <label class="lbl" for="sup-spacing">Separación (mm)</label>
+              <input type="number" id="sup-spacing" min="1" max="8" step="0.2" value="1.8" />
+            </div>
+            <div class="field">
+              <label class="lbl" for="sup-gap">Z-gap (mm)</label>
+              <input type="number" id="sup-gap" min="0" max="2" step="0.05" value="0.2" />
+            </div>
+            <div class="field">
+              <label class="lbl" for="sup-base">Base espesor (mm)</label>
+              <input type="number" id="sup-base" min="0.4" max="6" step="0.2" value="1.2" />
+            </div>
+          </div>
+          <p class="hint">Ramas de 0.8 mm que bajan del voladizo, se fusionan y nacen de una base común.</p>
+        </div>
+
         <button id="btn-cut" class="primary" disabled>Cortar modelo</button>
       </section>
 

@@ -17,7 +17,7 @@ from pydantic import BaseModel, Field
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
-from backend import connectors, mesh_ops
+from backend import connectors, mesh_ops, supports
 
 logging.basicConfig(
     level=logging.DEBUG,
@@ -50,6 +50,16 @@ class ConnectorSpec(BaseModel):
     count: int = Field(default=2, ge=1, le=8)
 
 
+class SupportsSpec(BaseModel):
+    enabled: bool = False
+    angle: float = Field(default=50.0, ge=20, le=80)
+    tip_diameter: float = Field(default=0.8, gt=0.2, le=4)
+    contact_diameter: float = Field(default=0.5, gt=0.2, le=3)
+    spacing: float = Field(default=1.8, gt=0.5, le=8)
+    z_gap: float = Field(default=0.2, ge=0, le=2)
+    base_thickness: float = Field(default=1.2, ge=0.4, le=6)
+
+
 class CutRequest(BaseModel):
     model_id: str
     mode: Literal["half", "multi"] = "half"
@@ -57,6 +67,7 @@ class CutRequest(BaseModel):
     position: float = Field(default=0.5, ge=0.02, le=0.98)
     parts: int = Field(default=4, ge=2, le=16)
     connector: ConnectorSpec = ConnectorSpec()
+    supports: Optional[SupportsSpec] = None
 
 
 def _model_paths(model_id: str):
@@ -214,6 +225,19 @@ def cut_model(req: CutRequest):
                 warnings.append(f"Conectores omitidos en corte {a_idx + 1}-{b_idx + 1}: {exc}")
                 logger.warning("conector falló: %s", exc)
 
+    supports_meta = []
+    if req.supports and req.supports.enabled:
+        spec = req.supports.model_dump()
+        for i, piece in enumerate(pieces):
+            try:
+                pieces[i], sup_info = supports.add_supports(piece, spec)
+                supports_meta.append({"index": i, **sup_info})
+                logger.info("soportes pieza %d: %d puntas, %d ramas",
+                            i, sup_info["tips"], sup_info["branches"])
+            except supports.SupportError as exc:
+                warnings.append(f"Soportes omitidos en pieza {i + 1}: {exc}")
+                logger.warning("soportes fallaron en pieza %d: %s", i, exc)
+
     job_id = uuid.uuid4().hex[:12]
     job_dir = JOBS_DIR / job_id
     job_dir.mkdir(parents=True, exist_ok=True)
@@ -240,6 +264,7 @@ def cut_model(req: CutRequest):
         "request": req.model_dump(),
         "pieces": out_pieces,
         "splits": splits,
+        "supports": supports_meta,
         "warnings": warnings,
     }
     (job_dir / "meta.json").write_text(json.dumps(job_meta))
