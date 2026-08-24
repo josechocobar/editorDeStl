@@ -4,6 +4,12 @@ import { STLLoader } from "three/addons/loaders/STLLoader.js";
 
 const $ = (id) => document.getElementById(id);
 
+window.addEventListener("error", (e) => {
+  const el = document.getElementById("toast");
+  if (el && !el.classList.contains("hidden")) return;
+  console.error(e.error || e.message);
+});
+
 const PALETTE = [0x4f8cff, 0xff8c42, 0x41d18c, 0xc56cf0, 0xffd166, 0x4ecdc4, 0xff6b81, 0xa3a1fb];
 
 const state = {
@@ -105,8 +111,15 @@ function addMeshFromGeometry(geo, color, list) {
   return mesh;
 }
 
+function loadSTL(url, onLoad) {
+  loader.load(url, onLoad, undefined, (err) => {
+    console.error("STLLoader:", err);
+    toast("No se pudo leer el STL desde el servidor", "error");
+  });
+}
+
 function loadOriginal(url) {
-  loader.load(url, (geo) => {
+  loadSTL(url, (geo) => {
     clearGroup([state.originalMesh, ...state.pieceMeshes]);
     state.pieceMeshes = [];
     planePreview.visible = false;
@@ -171,6 +184,8 @@ async function upload(file) {
     $("m-tris").textContent = info.triangles.toLocaleString("es");
     $("m-wat").textContent = info.watertight ? "sí ✓" : "no ⚠";
     $("m-wat").style.color = info.watertight ? "var(--ok)" : "var(--warn)";
+    const dz = $("drop");
+    dz.querySelector("strong").textContent = `✓ ${info.name}`;
     $("model-card").classList.remove("hidden");
     $("btn-cut").disabled = false;
     $("results-card").classList.add("hidden");
@@ -184,7 +199,9 @@ async function upload(file) {
 }
 
 function setStatusSubiendo(on) {
-  $("drop").querySelector("span").textContent = on ? "subiendo…" : "click para elegir archivo";
+  $("drop").querySelector("span").textContent = on
+    ? "subiendo…"
+    : "click para cambiar de archivo";
 }
 
 function currentMode() {
@@ -314,7 +331,7 @@ function showPieces(job) {
 
   let loaded = 0;
   job.pieces.forEach((p, i) => {
-    loader.load(p.file_url, (geo) => {
+    loadSTL(p.file_url, (geo) => {
       const mesh = addMeshFromGeometry(geo, PALETTE[i % PALETTE.length], state.pieceMeshes);
       const c = geo.boundingBox.getCenter(new THREE.Vector3());
       centers[i] = c;
@@ -339,11 +356,22 @@ function showPieces(job) {
 }
 
 function fitCameraToPieces() {
-  const g = new THREE.Group();
-  state.pieceMeshes.forEach((m) => g.add(m));
-  scene.add(g);
-  fitCamera(g);
-  scene.remove(g);
+  const box = new THREE.Box3();
+  const tmp = new THREE.Box3();
+  for (const m of state.pieceMeshes) {
+    m.updateWorldMatrix(true, false);
+    tmp.copy(m.geometry.boundingBox).applyMatrix4(m.matrixWorld);
+    box.union(tmp);
+  }
+  const sphere = box.getBoundingSphere(new THREE.Sphere());
+  if (!sphere.radius) return;
+  const dist = (sphere.radius / Math.sin((camera.fov * Math.PI) / 360)) * 1.05;
+  const dirV = new THREE.Vector3(1, 0.65, 1).normalize();
+  camera.position.copy(sphere.center).addScaledVector(dirV, dist);
+  camera.near = Math.max(dist / 100, 0.1);
+  camera.far = dist * 20;
+  camera.updateProjectionMatrix();
+  controls.target.copy(sphere.center);
 }
 
 function applyExplode() {
