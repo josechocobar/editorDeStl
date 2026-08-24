@@ -89,6 +89,7 @@ function fitCamera(obj) {
 
 function clearGroup(list) {
   for (const m of list) {
+    if (!m) continue;
     world.remove(m);
     m.geometry.dispose();
     m.material.dispose();
