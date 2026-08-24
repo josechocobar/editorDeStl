@@ -24,6 +24,23 @@ def model_info(mesh):
     }
 
 
+PREVIEW_MAX_TRIS = 120_000
+
+
+def decimate_for_preview(mesh, target_tris=PREVIEW_MAX_TRIS):
+    if len(mesh.faces) <= target_tris:
+        return mesh
+    import fast_simplification
+
+    pts, fac = fast_simplification.simplify(
+        mesh.vertices, mesh.faces, target_count=target_tris
+    )
+    out = trimesh.Trimesh(pts, fac, process=True)
+    if len(out.faces) == 0:
+        return mesh
+    return out
+
+
 def plane_for(axis_name, frac, bounds):
     axis = AXES[axis_name]
     lo, hi = float(bounds[0][axis]), float(bounds[1][axis])

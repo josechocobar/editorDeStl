@@ -8,4 +8,5 @@ scipy
 networkx
 shapely
 rtree
+fast-simplification>=0.1.7
 pytest

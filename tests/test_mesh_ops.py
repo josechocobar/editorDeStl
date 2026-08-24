@@ -220,3 +220,39 @@ def test_load_and_info_roundtrip(tmp_path):
     assert info["watertight"] is True
     assert info["triangles"] > 0
     assert all(d == pytest.approx(30.0, abs=0.5) for d in info["dims_mm"])
+
+
+def test_decimate_reduces_and_preserves_shape():
+    sphere = trimesh.creation.icosphere(subdivisions=4, radius=15)
+    dec = mesh_ops.decimate_for_preview(sphere, target_tris=800)
+    assert len(dec.faces) <= 900
+    assert len(dec.faces) >= 100
+    assert dec.is_watertight
+    assert abs(dec.volume) == pytest.approx(abs(sphere.volume), rel=0.05)
+
+
+def test_decimate_noop_below_target():
+    box = trimesh.creation.box(extents=[10, 10, 10])
+    out = mesh_ops.decimate_for_preview(box, target_tris=120_000)
+    assert len(out.faces) == len(box.faces)
+
+
+def test_suggest_box_mid_cut():
+    box = trimesh.creation.box(extents=[40, 40, 20])
+    origin = np.array([0.0, 0.0, 0.0])
+    normal = np.array([0.0, 0.0, 1.0])
+    sug = connectors.suggest(box, origin, normal)
+    assert 3.0 <= sug["diameter_mm"] <= 6.5
+    assert 3.0 <= sug["depth_mm"] <= 6.0
+    assert 1 <= sug["count"] <= 4
+    assert sug["thickness_mm"] == pytest.approx(10.0, abs=0.2)
+
+
+def test_suggest_thin_wall_limits_diameter():
+    thin = trimesh.creation.box(extents=[60, 60, 8])
+    origin = np.array([0.0, 0.0, 0.0])
+    normal = np.array([0.0, 0.0, 1.0])
+    sug = connectors.suggest(thin, origin, normal)
+    assert sug["thickness_mm"] == pytest.approx(4.0, abs=0.2)
+    assert sug["diameter_mm"] <= 0.6 * sug["thickness_mm"]
+    assert sug["depth_mm"] >= 3.0

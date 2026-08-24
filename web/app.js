@@ -131,6 +131,36 @@ function loadOriginal(url) {
   });
 }
 
+let suggestTimer = null;
+
+async function fetchSuggestion() {
+  if (!state.modelId || $("conn-type").value === "none") return;
+  try {
+    const params = new URLSearchParams({
+      axis: state.axis,
+      position: String(Number($("pos-slider").value) / 100),
+      mode: currentMode(),
+    });
+    const res = await fetch(`/api/models/${state.modelId}/suggest-connector?${params}`);
+    if (!res.ok) return;
+    const sug = await res.json();
+    $("conn-dia").value = sug.diameter_mm;
+    $("conn-depth").value = sug.depth_mm;
+    $("conn-count").value = sug.count;
+    const el = $("conn-suggest");
+    el.textContent = `Sugerido (${sug.basis}): cara ${sug.face_mm[0]}×${sug.face_mm[1]} mm · `
+      + `espesor mín. ${sug.thickness_mm} mm → ⌀${sug.diameter_mm} mm × prof. ${sug.depth_mm} mm × ${sug.count}`;
+    el.hidden = false;
+  } catch {
+    /* sugerencia es best-effort */
+  }
+}
+
+function scheduleSuggestion() {
+  clearTimeout(suggestTimer);
+  suggestTimer = setTimeout(fetchSuggestion, 300);
+}
+
 const AXIS_VEC = { x: [1, 0, 0], y: [0, 1, 0], z: [0, 0, 1] };
 
 function updatePlanePreview() {
@@ -190,7 +220,8 @@ async function upload(file) {
     $("model-card").classList.remove("hidden");
     $("btn-cut").disabled = false;
     $("results-card").classList.add("hidden");
-    loadOriginal(`/api/models/${info.id}/file`);
+    loadOriginal(`/api/models/${info.id}/preview`);
+    fetchSuggestion();
     toast(`Modelo cargado: ${info.name}`);
   } catch (err) {
     toast(String(err.message || err), "error");
@@ -216,6 +247,7 @@ document.querySelectorAll('input[name="mode"]').forEach((r) =>
     $("field-pos").classList.toggle("hidden", !half);
     $("field-parts").classList.toggle("hidden", half);
     updatePlanePreview();
+    fetchSuggestion();
   })
 );
 
@@ -225,16 +257,19 @@ document.querySelectorAll(".seg button").forEach((b) =>
     b.classList.add("active");
     state.axis = b.dataset.axis;
     updatePlanePreview();
+    fetchSuggestion();
   })
 );
 
 $("pos-slider").addEventListener("input", () => {
   $("pos-val").value = `${$("pos-slider").value}%`;
   updatePlanePreview();
+  scheduleSuggestion();
 });
 
 $("conn-type").addEventListener("change", () => {
   $("conn-fields").classList.toggle("hidden", $("conn-type").value === "none");
+  fetchSuggestion();
 });
 
 $("file-input").addEventListener("change", (e) => {
@@ -302,7 +337,7 @@ function renderResults(job) {
         <div class="p-name">${dot}${p.name}</div>
         <div class="p-meta">${p.dims_mm.map((d) => Math.round(d)).join("×")} mm · ${p.volume_cm3} cm³${p.watertight ? "" : " · ⚠ no estanca"}</div>
       </div>
-      <a href="${p.file_url}" download>STL</a>`;
+      <a href="${p.file_url}" download="${p.name}">STL</a>`;
     list.appendChild(li);
   });
 
@@ -332,7 +367,7 @@ function showPieces(job) {
 
   let loaded = 0;
   job.pieces.forEach((p, i) => {
-    loadSTL(p.file_url, (geo) => {
+    loadSTL(`${p.file_url}/preview`, (geo) => {
       const mesh = addMeshFromGeometry(geo, PALETTE[i % PALETTE.length], state.pieceMeshes);
       const c = geo.boundingBox.getCenter(new THREE.Vector3());
       centers[i] = c;
