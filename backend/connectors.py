@@ -1,3 +1,5 @@
+import math
+
 import numpy as np
 import trimesh
 
@@ -22,6 +24,54 @@ def _contains(mesh, point):
         return bool(mesh.contains([point])[0])
     except Exception:
         return False
+
+
+def suggest(mesh, origin, normal, max_count=4):
+    """Sugiere diámetro, profundidad y cantidad para la cara de corte dada.
+
+    Reglas de impresión FDM:
+    - diámetro ≤ 60 % del espesor mínimo de las dos mitades (mín. imprimible 2 mm)
+    - profundidad ≈ 45 % del espesor mínimo (mínimo 3 mm para agarre)
+    - separación entre conectores ≥ 1.7 × diámetro
+    """
+    n = normal / np.linalg.norm(normal)
+    signed = (mesh.vertices - origin) @ n
+    sides = [float(-signed.min()), float(signed.max())]
+    sides = [t for t in sides if t > 0.5]
+    if not sides:
+        raise ConnectorError("El plano está fuera del material")
+    thickness = min(sides)
+
+    segs = trimesh.intersections.mesh_plane(mesh, n, origin)
+    if len(segs) == 0:
+        raise ConnectorError("El plano no cruza material del modelo")
+    rel = segs.reshape(-1, 3) - origin
+    u, v, _ = _plane_basis(n)
+    su = rel @ u
+    sv = rel @ v
+    span_u = float(su.max() - su.min())
+    span_v = float(sv.max() - sv.min())
+
+    edge_margin = 2.4
+    d_span = min(span_u, span_v) - edge_margin
+    d_thick = 0.6 * thickness
+    diameter = math.floor(min(d_span, d_thick, 10.0) * 2) / 2.0
+    diameter = max(2.0, diameter)
+
+    fit_u = int((span_u - edge_margin - diameter) // (diameter * 1.7)) + 1
+    fit_v = int((span_v - edge_margin - diameter) // (diameter * 1.7)) + 1
+    count = int(max(1, min(max_count, fit_u, fit_v)))
+
+    depth = int(thickness * 0.45 + 0.5)
+    depth = float(max(3.0, min(10.0, depth)))
+
+    return {
+        "diameter_mm": diameter,
+        "depth_mm": depth,
+        "count": count,
+        "face_mm": [round(span_u, 1), round(span_v, 1)],
+        "thickness_mm": round(thickness, 1),
+    }
 
 
 def compute_sites(piece_male, piece_female, origin, normal, count, diameter, depth=8.0):

@@ -1,6 +1,7 @@
 import io
 import json
 import logging
+import re
 import sys
 import uuid
 import zipfile
@@ -16,7 +17,7 @@ from pydantic import BaseModel, Field
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
-from backend import connectors, mesh_ops
+from backend import connectors, mesh_ops, supports
 
 logging.basicConfig(
     level=logging.DEBUG,
@@ -49,6 +50,16 @@ class ConnectorSpec(BaseModel):
     count: int = Field(default=2, ge=1, le=8)
 
 
+class SupportsSpec(BaseModel):
+    enabled: bool = False
+    angle: float = Field(default=50.0, ge=20, le=80)
+    tip_diameter: float = Field(default=0.8, gt=0.2, le=4)
+    contact_diameter: float = Field(default=0.5, gt=0.2, le=3)
+    spacing: float = Field(default=1.8, gt=0.5, le=8)
+    z_gap: float = Field(default=0.2, ge=0, le=2)
+    base_thickness: float = Field(default=1.2, ge=0.4, le=6)
+
+
 class CutRequest(BaseModel):
     model_id: str
     mode: Literal["half", "multi"] = "half"
@@ -56,6 +67,7 @@ class CutRequest(BaseModel):
     position: float = Field(default=0.5, ge=0.02, le=0.98)
     parts: int = Field(default=4, ge=2, le=16)
     connector: ConnectorSpec = ConnectorSpec()
+    supports: Optional[SupportsSpec] = None
 
 
 def _model_paths(model_id: str):
@@ -66,6 +78,25 @@ def _model_paths(model_id: str):
     if not stl.exists() or not meta.exists():
         raise HTTPException(404, "Modelo no encontrado")
     return stl, meta
+
+
+def _slug(name: str) -> str:
+    base = name.rsplit(".", 1)[0]
+    slug = re.sub(r"[^\w\-]+", "_", base, flags=re.UNICODE).strip("_")
+    return slug or "modelo"
+
+
+def _preview_response(stl_path: Path, download_name: Optional[str] = None):
+    preview = stl_path.with_suffix(".preview.stl")
+    if not preview.exists() or preview.stat().st_mtime < stl_path.stat().st_mtime:
+        decimated = mesh_ops.decimate_for_preview(mesh_ops.load_mesh(stl_path))
+        decimated.export(preview)
+        logger.info("preview %s: %d tris", preview.name, len(decimated.faces))
+    return FileResponse(
+        preview,
+        media_type="model/stl",
+        filename=download_name,
+    )
 
 
 @app.post("/api/models")
@@ -107,6 +138,42 @@ def get_model(model_id: str):
 def get_model_file(model_id: str):
     stl_path, _ = _model_paths(model_id)
     return FileResponse(stl_path, media_type="model/stl", filename=f"{model_id}.stl")
+
+
+@app.get("/api/models/{model_id}/preview")
+def get_model_preview(model_id: str):
+    stl_path, _ = _model_paths(model_id)
+    return _preview_response(stl_path)
+
+
+@app.get("/api/models/{model_id}/suggest-connector")
+def suggest_connector(
+    model_id: str,
+    axis: Literal["x", "y", "z"] = "z",
+    position: float = Field(default=0.5, ge=0.02, le=0.98),
+    mode: Literal["half", "multi"] = "half",
+):
+    stl_path, _ = _model_paths(model_id)
+    mesh = mesh_ops.load_mesh(stl_path)
+    if mode == "multi":
+        lo, hi = mesh.bounds
+        longest = int(np.argmax(hi - lo))
+        origin = np.zeros(3)
+        normal = np.zeros(3)
+        origin[longest] = (lo[longest] + hi[longest]) / 2.0
+        normal[longest] = 1.0
+        hint = "estimado para la primera división (eje más largo)"
+    else:
+        try:
+            origin, normal = mesh_ops.plane_for(axis, position, mesh.bounds)
+        except ValueError as exc:
+            raise HTTPException(400, str(exc)) from exc
+        hint = f"cara de corte eje {axis} @ {int(position * 100)}%"
+    try:
+        sug = connectors.suggest(mesh, origin, normal)
+    except connectors.ConnectorError as exc:
+        raise HTTPException(422, str(exc)) from exc
+    return {**sug, "basis": hint}
 
 
 @app.post("/api/cut")
@@ -158,13 +225,27 @@ def cut_model(req: CutRequest):
                 warnings.append(f"Conectores omitidos en corte {a_idx + 1}-{b_idx + 1}: {exc}")
                 logger.warning("conector falló: %s", exc)
 
+    supports_meta = []
+    if req.supports and req.supports.enabled:
+        spec = req.supports.model_dump()
+        for i, piece in enumerate(pieces):
+            try:
+                pieces[i], sup_info = supports.add_supports(piece, spec)
+                supports_meta.append({"index": i, **sup_info})
+                logger.info("soportes pieza %d: %d puntas, %d ramas",
+                            i, sup_info["tips"], sup_info["branches"])
+            except supports.SupportError as exc:
+                warnings.append(f"Soportes omitidos en pieza {i + 1}: {exc}")
+                logger.warning("soportes fallaron en pieza %d: %s", i, exc)
+
     job_id = uuid.uuid4().hex[:12]
     job_dir = JOBS_DIR / job_id
     job_dir.mkdir(parents=True, exist_ok=True)
 
     out_pieces = []
+    base = _slug(meta.get("name") or "modelo")
     for i, piece in enumerate(pieces):
-        name = f"pieza_{i + 1}_de_{len(pieces)}.stl"
+        name = f"{base}_pieza_{i + 1}_de_{len(pieces)}.stl"
         piece_path = job_dir / f"{i}.stl"
         piece.export(piece_path)
         lo, hi = piece.bounds
@@ -183,6 +264,7 @@ def cut_model(req: CutRequest):
         "request": req.model_dump(),
         "pieces": out_pieces,
         "splits": splits,
+        "supports": supports_meta,
         "warnings": warnings,
     }
     (job_dir / "meta.json").write_text(json.dumps(job_meta))
@@ -193,10 +275,27 @@ def cut_model(req: CutRequest):
 @app.get("/api/jobs/{job_id}/pieces/{index}")
 def get_piece(job_id: str, index: int):
     job_dir = JOBS_DIR / _safe(job_id)
+    meta_path = job_dir / "meta.json"
     path = job_dir / f"{index}.stl"
     if not path.exists():
         raise HTTPException(404, "Pieza no encontrada")
-    return FileResponse(path, media_type="model/stl")
+    name = None
+    if meta_path.exists():
+        meta = json.loads(meta_path.read_text())
+        for p in meta["pieces"]:
+            if p["index"] == index:
+                name = p["name"]
+                break
+    return FileResponse(path, media_type="model/stl", filename=name or f"pieza_{index}.stl")
+
+
+@app.get("/api/jobs/{job_id}/pieces/{index}/preview")
+def get_piece_preview(job_id: str, index: int):
+    job_dir = JOBS_DIR / _safe(job_id)
+    path = job_dir / f"{index}.stl"
+    if not path.exists():
+        raise HTTPException(404, "Pieza no encontrada")
+    return _preview_response(path)
 
 
 @app.get("/api/jobs/{job_id}/zip")
