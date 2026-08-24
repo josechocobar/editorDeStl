@@ -123,6 +123,9 @@ def cut_model(req: CutRequest):
             logger.info("corte multiple partes=%d", req.parts)
     except ValueError as exc:
         raise HTTPException(400, str(exc)) from exc
+    except Exception as exc:
+        logger.exception("fallo el corte de %s", req.model_id)
+        raise HTTPException(500, f"Error procesando la malla: {exc}") from exc
 
     warnings = []
     conn_meta = None

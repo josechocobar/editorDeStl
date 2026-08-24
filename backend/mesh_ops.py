@@ -6,7 +6,7 @@ MIN_FACE_RATIO = 0.01
 
 
 def load_mesh(path):
-    loaded = trimesh.load(path, force="mesh")
+    loaded = trimesh.load_mesh(path, force="mesh")
     if not isinstance(loaded, trimesh.Trimesh) or len(loaded.faces) == 0:
         raise ValueError("El archivo no contiene una malla de triángulos válida")
     return loaded

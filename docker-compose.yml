@@ -1,0 +1,12 @@
+services:
+  stlfiles:
+    image: stlfiles/backend:latest
+    container_name: stlfiles_backend
+    build:
+      context: .
+      dockerfile: Dockerfile
+    ports:
+      - "8321:8321"
+    volumes:
+      - ./data:/app/data
+    restart: unless-stopped

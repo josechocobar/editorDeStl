@@ -60,6 +60,8 @@ def test_pin_connector_watertight_and_fits():
     sites = connectors.compute_sites(high, origin, normal, count=2,
                                      diameter=6.0)
     assert len(sites) == 2
+    dist = np.linalg.norm(sites[0] - sites[1])
+    assert dist >= 6.0
     for s in sites:
         assert abs(s[0]) < 18 and abs(s[1]) < 18
         assert abs(s[2]) < 1e-6
@@ -73,6 +75,15 @@ def test_pin_connector_watertight_and_fits():
     assert abs(pin_added.volume) > abs(low.volume)
     assert abs(hole_cut.volume) < abs(high.volume)
     assert info["pin_len_mm"] == pytest.approx(2 + 8 * 0.85, abs=0.01)
+
+
+def test_sites_reject_when_count_does_not_fit():
+    box = trimesh.creation.box(extents=[40, 40, 20])
+    half = trimesh.intersections.slice_mesh_plane(box, [0, 0, -1], [0, 0, 0], cap=True)
+    origin = np.array([0.0, 0.0, 0.0])
+    normal = np.array([0.0, 0.0, 1.0])
+    with pytest.raises(connectors.ConnectorError):
+        connectors.compute_sites(half, origin, normal, count=8, diameter=12.0)
 
 
 def test_prism_connector_works():
@@ -89,6 +100,18 @@ def test_prism_connector_works():
     assert abs(hole_cut.volume) < abs(high.volume)
 
 
+def test_connector_sites_inset_from_edges():
+    box = trimesh.creation.box(extents=[40, 40, 20])
+    half = trimesh.intersections.slice_mesh_plane(box, [0, 0, -1], [0, 0, 0], cap=True)
+    origin = np.array([0.0, 0.0, 0.0])
+    normal = np.array([0.0, 0.0, 1.0])
+    sites = connectors.compute_sites(half, origin, normal, count=2, diameter=6.0)
+    assert len(sites) == 2
+    limit = 20.0 - (6.0 / 2.0 + 1.5)
+    for s in sites:
+        assert abs(s[0]) <= limit + 1e-6 and abs(s[1]) <= limit + 1e-6
+
+
 def test_connector_on_tiny_face_raises():
     tiny = trimesh.creation.box(extents=[6, 6, 30])
     half = trimesh.intersections.slice_mesh_plane(tiny, [0, 0, -1], [0, 0, 0], cap=True)
@@ -96,6 +119,17 @@ def test_connector_on_tiny_face_raises():
     normal = np.array([0.0, 0.0, 1.0])
     with pytest.raises(connectors.ConnectorError):
         connectors.compute_sites(half, origin, normal, count=2, diameter=6.0)
+
+
+def test_split_multi_annular_section_box_with_hole():
+    box = trimesh.creation.box(extents=[40, 40, 20])
+    hole = trimesh.creation.cylinder(radius=8, height=30)
+    bracket = trimesh.boolean.difference([box, hole], engine="manifold")
+    pieces, splits = mesh_ops.split_multi(bracket, 4)
+    assert len(pieces) >= 2
+    assert all(p.is_watertight for p in pieces)
+    total = sum(abs(p.volume) for p in pieces)
+    assert total == pytest.approx(abs(bracket.volume), rel=1e-3)
 
 
 def test_load_and_info_roundtrip(tmp_path):

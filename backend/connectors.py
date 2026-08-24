@@ -17,39 +17,63 @@ def _plane_basis(normal):
     return u, v, n
 
 
+def _row_positions(lo, hi, k, diameter, gap):
+    span = hi - lo
+    needed = k * diameter + (k - 1) * gap
+    if needed > span:
+        return None
+    if k == 1:
+        return [(lo + hi) / 2]
+    step = (span - diameter) / (k - 1)
+    return [lo + diameter / 2 + i * step for i in range(k)]
+
+
 def compute_sites(piece, origin, normal, count, diameter):
     verts = piece.vertices
     dist = np.abs((verts - origin) @ normal)
     span = float(np.max(piece.extents))
     eps = span * 0.02
     near = verts[dist < eps]
-    if len(near) < 8:
+    if len(near) < 4:
         raise ConnectorError("La cara de corte es demasiado chica para colocar conectores")
 
     u, v, n = _plane_basis(normal)
     pu = (near - origin) @ u
     pv = (near - origin) @ v
-    margin = diameter * 1.35
+    margin = diameter / 2.0 + 1.5
+    gap = diameter * 0.6
     lo_u, hi_u = float(pu.min()) + margin, float(pu.max()) - margin
     lo_v, hi_v = float(pv.min()) + margin, float(pv.max()) - margin
-    if lo_u >= hi_u or lo_v >= hi_v:
-        raise ConnectorError(
-            f"La cara de corte es demasiado chica para conectores de {diameter:.1f} mm"
-        )
+    wu, wv = hi_u - lo_u, hi_v - lo_v
 
+    candidates = [
+        (np.linspace(lo_v, hi_v, 1), _row_positions(lo_u, hi_u, count, diameter, gap)),
+        (_row_positions(lo_v, hi_v, count, diameter, gap), np.linspace(lo_u, hi_u, 1)),
+    ]
     cols = int(np.ceil(np.sqrt(count)))
     rows = int(np.ceil(count / cols))
-    us = np.linspace(lo_u, hi_u, cols) if cols > 1 else np.array([(lo_u + hi_u) / 2])
-    vs = np.linspace(lo_v, hi_v, rows) if rows > 1 else np.array([(lo_v + hi_v) / 2])
+    if cols > 1 and rows > 1:
+        candidates.append(
+            (
+                _row_positions(lo_v, hi_v, rows, diameter, gap),
+                _row_positions(lo_u, hi_u, cols, diameter, gap),
+            )
+        )
 
-    sites = []
-    for r_i, sv in enumerate(vs):
-        row_u = us if r_i % 2 == 0 else us[::-1]
-        for su in row_u:
-            if len(sites) >= count:
-                break
-            sites.append(origin + su * u + sv * v)
-    return sites
+    for vs, us in candidates:
+        if us is None or vs is None:
+            continue
+        sites = []
+        for sv in vs:
+            for su in us:
+                if len(sites) < count:
+                    sites.append(origin + su * u + sv * v)
+        return sites
+
+    raise ConnectorError(
+        f"No entran {count} conectores de {diameter:.1f} mm en la cara útil "
+        f"de {wu:.1f} x {wv:.1f} mm; probá menos cantidad o menor diámetro"
+    )
 
 
 def _pin_primitive(site, normal, kind, width, length, sections=48):
