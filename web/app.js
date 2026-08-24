@@ -174,9 +174,17 @@ function updatePlanePreview() {
   const span = box.max[axis] - lo;
   const frac = Number($("pos-slider").value) / 100;
 
-  const others = axis === "x" ? ["y", "z"] : axis === "y" ? ["x", "z"] : ["x", "y"];
-  const w = box.max[others[0]] - box.min[others[0]];
-  const h = box.max[others[1]] - box.min[others[1]];
+  let w, h;
+  if (axis === "x") {
+    w = box.max.z - box.min.z;
+    h = box.max.y - box.min.y;
+  } else if (axis === "y") {
+    w = box.max.x - box.min.x;
+    h = box.max.z - box.min.z;
+  } else {
+    w = box.max.x - box.min.x;
+    h = box.max.y - box.min.y;
+  }
   planePreview.geometry.dispose();
   planePreview.geometry = new THREE.PlaneGeometry(w * 1.04, h * 1.04);
 
