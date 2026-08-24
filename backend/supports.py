@@ -123,11 +123,14 @@ def _tapered_segment(p0, r0, p1, r1, sections=20):
     return m
 
 
-def _tip_mesh(point, z_gap, contact_r, tip_r):
+def _tip_mesh(point, z_gap, contact_r, tip_r, floor_z=None):
     """Punta cónica bajo el voladizo. El Z-gap queda como aire entre la
-    superficie y el disco de contacto (regla R4)."""
+    superficie y el disco de contacto (regla R4). Con floor_z se acorta la
+    punta para que nunca baje del piso de impresión."""
     top_z = float(point[2]) - z_gap
     bot_z = top_z - TIP_CONE_LEN
+    if floor_z is not None:
+        bot_z = max(bot_z, float(floor_z))
     cone = _tapered_segment(
         [float(point[0]), float(point[1]), top_z], contact_r,
         [float(point[0]), float(point[1]), bot_z], tip_r,
@@ -135,18 +138,19 @@ def _tip_mesh(point, z_gap, contact_r, tip_r):
     return ([cone] if cone is not None else []), bot_z
 
 
-def build_support_solids(mesh, contacts, tip_diameter, z_gap):
+def build_support_solids(mesh, contacts, tip_diameter, z_gap, base_thickness=1.2):
     """Columnas verticales que bajan nivel a nivel, se fusionan cuando están
     cerca y terminan sobre el modelo o en la base común (R1, R2 y R6)."""
     bed_z = float(mesh.bounds[0][2])
-    pad_top = bed_z + 1.2
+    pad_top = bed_z + float(base_thickness)
+    embed = max(float(base_thickness) - SINK_MM, float(base_thickness) / 2.0)
     tip_r = tip_diameter / 2.0
     dz = 4.0
     fuse_r = 2.5
 
     columns = []
     for p in contacts:
-        head_z = float(p[2]) - z_gap - TIP_CONE_LEN
+        head_z = max(float(p[2]) - z_gap - TIP_CONE_LEN, bed_z)
         floor_z = _floor_below(mesh, p[:2], head_z)
         target = None if floor_z is None else max(floor_z, pad_top)
         col = _Column(p[:2], head_z, target, tip_r)
@@ -161,7 +165,7 @@ def build_support_solids(mesh, contacts, tip_diameter, z_gap):
     while active:
         progressed = False
         for c in active:
-            limit = c.target_z if c.target_z is not None else pad_top - SINK_MM
+            limit = c.target_z if c.target_z is not None else bed_z + embed
             nz = max(limit, c.z - dz)
             if nz < c.z - 1e-9:
                 progressed = True
@@ -220,16 +224,18 @@ def build_support_solids(mesh, contacts, tip_diameter, z_gap):
     return segments, pad_feet
 
 
-def _base_pad(pad_feet, thickness, margin=2.5):
-    """Disco base común donde terminan las columnas que llegan a la cama (R5)."""
+def _base_pad(pad_feet, thickness, margin=2.5, bed_z=None):
+    """Disco base común donde terminan las columnas que llegan a la cama (R5).
+    Se ancla al piso real del modelo: usar min(c.z) de las columnas lo tira
+    por debajo de la pieza cuando hay contactos bajos."""
     if not pad_feet:
         return None
     pts = np.array([c.xy for c in pad_feet])
     center = pts.mean(axis=0)
     radius = float(np.max(np.linalg.norm(pts - center, axis=1))) + margin
     pad = trimesh.creation.cylinder(radius=radius, height=thickness, sections=64)
-    bed_z = float(min(c.z for c in pad_feet))
-    pad.apply_translation([center[0], center[1], bed_z + thickness / 2.0])
+    z0 = float(bed_z) if bed_z is not None else float(min(c.z for c in pad_feet))
+    pad.apply_translation([center[0], center[1], z0 + thickness / 2.0])
     return pad
 
 
@@ -247,15 +253,19 @@ def add_supports(piece, spec):
 
     solids = []
     tip_r = spec["tip_diameter"] / 2.0
+    piece_floor = float(piece.bounds[0][2])
     for p in contacts:
-        parts, _ = _tip_mesh(p, spec["z_gap"], spec["contact_diameter"], tip_r)
+        parts, _ = _tip_mesh(p, spec["z_gap"], spec["contact_diameter"], tip_r,
+                             floor_z=piece_floor)
         solids.extend(parts)
 
     segments, pad_feet = build_support_solids(
-        piece, contacts, spec["tip_diameter"], spec["z_gap"])
+        piece, contacts, spec["tip_diameter"], spec["z_gap"],
+        base_thickness=spec["base_thickness"])
     solids.extend(s for s in segments if s is not None)
 
-    pad = _base_pad(pad_feet, spec["base_thickness"])
+    pad = _base_pad(pad_feet, spec["base_thickness"],
+                    bed_z=float(piece.bounds[0][2]))
     if pad is not None:
         solids.append(pad)
     info["branches"] = len(solids)

@@ -70,6 +70,25 @@ def test_sphere_supported_watertight_and_contains_original():
     assert bool(np.all(out.bounds[1] >= sphere.bounds[1] - 1e-6))
 
 
+def test_pad_sits_on_piece_floor_even_with_low_contacts():
+    """El pad se ancla al min-z de la pieza, no al pie de columna más bajo
+    (contactos cercanos al polo inferior tiraban la base por debajo)."""
+    sphere = trimesh.creation.icosphere(subdivisions=3, radius=12)
+    sphere.apply_translation([0, 0, 20])
+    out, info = supports.add_supports(sphere, SPEC)
+    assert info["tips"] > 0
+    assert out.bounds[0][2] == pytest.approx(sphere.bounds[0][2], abs=1e-6)
+
+
+def test_base_thickness_is_honored():
+    piece = _t_piece()
+    thick = dict(SPEC, base_thickness=3.0)
+    out, _ = supports.add_supports(piece, thick)
+    assert out.is_watertight
+    assert abs(out.volume) > abs(
+        supports.add_supports(_t_piece(), SPEC)[0].volume)
+
+
 def test_generation_is_deterministic():
     a, ia = supports.add_supports(_t_piece(), SPEC)
     b, ib = supports.add_supports(_t_piece(), SPEC)
