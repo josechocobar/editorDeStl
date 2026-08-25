@@ -32,8 +32,9 @@ web/
                   3·Piezas|Resultado (resultados + zip). Viewport + HUD.
   js/             ES modules sin build step (importmap en index.html):
     app.js        Entry: estado global, wiring de UI, flows upload/cut/
-                  supports, explode slider, sugerencia conectores
-                  (refreshSuggestion con debounce).
+                  supports, explode slider, librería de archivos,
+                  sesión persistente (localStorage), dedupe 409,
+                  sugerencia conectores (refreshSuggestion con debounce).
     scene.js      Three.js puro sin DOM: escena `world` rotada -90° en X
                   (Z-up modelo vs Y-up escena), updatePlanePreview
                   (dimensiones por eje, ver problemas/), fitCamera.
@@ -51,10 +52,13 @@ BITACORA.md       Historial de construcción, errores y lecciones (E1, E2...).
 ## API
 
 ```
-POST /api/models                      upload STL → id + medidas
+POST /api/models                      upload STL → id + medidas (slug por nombre)
+                                     409 si nombre existe (resp con existing)
+GET  /api/models                      lista todos los modelos (meta, mtime desc)
 GET  /api/models/{id}/preview         STL decimado (cache .preview.stl)
 GET  /api/models/{id}/suggest-connector   sugerencia pin según cara de corte
 POST /api/models/{id}/supports        soportes al modelo entero → job 1 pieza
+DELETE /api/models/{id}               borra stl + meta + preview
 POST /api/cut                         corte → job {pieces, splits, warnings}
 GET  /api/jobs/{job}/pieces/{i}       STL pieza (+ /preview decimado)
 GET  /api/jobs/{job}/zip              zip piezas + {corte|soportes}_info.json

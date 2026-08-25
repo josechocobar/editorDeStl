@@ -177,6 +177,18 @@ a.secondary { background: var(--card); border: 1px solid var(--accent); color: v
 }
 @keyframes spin { to { transform: rotate(360deg); } }
 
+#lib { margin-top: 8px; }
+.lib-head { font-size: 11px; color: var(--muted); font-weight: 500; text-transform: uppercase; letter-spacing: .3px; margin-bottom: 4px; }
+#lib-list { list-style: none; padding: 0; margin: 0; max-height: 180px; overflow-y: auto; }
+#lib-list li { display: flex; align-items: center; gap: 6px; padding: 5px 0; border-bottom: 1px solid var(--border); font-size: 12px; }
+#lib-list li:last-child { border-bottom: none; }
+.lib-name { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--text); }
+.lib-meta { font-size: 10px; color: var(--muted); margin-left: 4px; }
+.lib-btn { background: transparent; border: 1px solid var(--border); color: var(--muted); padding: 2px 8px; border-radius: 4px; cursor: pointer; font-size: 11px; flex-shrink: 0; }
+.lib-btn:hover { border-color: var(--accent); color: var(--accent); }
+.lib-btn.del:hover { border-color: var(--err); color: var(--err); }
+#lib-list:empty::after { content: "Ninguno"; color: var(--muted); font-size: 11px; }
+
 .hidden { display: none !important; }
 
 @media (max-width: 760px) {
