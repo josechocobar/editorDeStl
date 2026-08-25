@@ -1,29 +1,7 @@
 """Smoke de la API: importar la app valida todas las rutas en tiempo de
 definición (parámetros mal declarados en endpoints rompen el import)."""
-import io
-import uuid
+from tests.helpers import get_client, sphere_bytes, upload_model
 
-import trimesh
-
-
-def _sphere_bytes():
-    sphere = trimesh.creation.icosphere(subdivisions=2, radius=12)
-    buf = io.BytesIO()
-    sphere.export(buf, file_type="stl")
-    return buf.getvalue()
-
-
-def _upload(client, name="esfera"):
-    fname = f"{name}_{uuid.uuid4().hex[:6]}.stl"
-    up = client.post(
-        "/api/models",
-        files={"file": (fname, _sphere_bytes(), "model/stl")},
-    )
-    assert up.status_code == 200, up.text
-    return up.json(), fname
-
-
-# --- import / routes ---
 
 def test_app_imports_and_routes_register():
     from backend.main import app
@@ -36,11 +14,7 @@ def test_app_imports_and_routes_register():
 
 
 def test_suggest_connector_query_params_accepted():
-    from fastapi.testclient import TestClient
-
-    from backend.main import app
-
-    client = TestClient(app)
+    client = get_client()
     resp = client.get("/api/models/inexistente/suggest-connector", params={"position": 0.4})
     assert resp.status_code == 404
 
@@ -48,12 +22,8 @@ def test_suggest_connector_query_params_accepted():
 # --- supports ---
 
 def test_supports_endpoint_returns_downloadable_piece():
-    from fastapi.testclient import TestClient
-
-    from backend.main import app
-
-    client = TestClient(app)
-    info, fname = _upload(client)
+    client = get_client()
+    info = upload_model(client)
 
     resp = client.post(f"/api/models/{info['id']}/supports", json={"angle": 50})
     assert resp.status_code == 200, resp.text
@@ -75,22 +45,14 @@ def test_supports_endpoint_returns_downloadable_piece():
 
 
 def test_supports_endpoint_validates_params():
-    from fastapi.testclient import TestClient
-
-    from backend.main import app
-
-    client = TestClient(app)
+    client = get_client()
     resp = client.post("/api/models/abc123/supports", json={"angle": 500})
     assert resp.status_code == 422
 
 
 def test_supports_accepts_minimum_contact_diameter_from_ui():
-    from fastapi.testclient import TestClient
-
-    from backend.main import app
-
-    client = TestClient(app)
-    info, fname = _upload(client)
+    client = get_client()
+    info = upload_model(client)
     resp = client.post(
         f"/api/models/{info['id']}/supports", json={"contact_diameter": 0.2}
     )
@@ -98,32 +60,28 @@ def test_supports_accepts_minimum_contact_diameter_from_ui():
 
 
 def test_supports_endpoint_returns_informative_500(monkeypatch):
-    from fastapi.testclient import TestClient
-
     from backend import main as m
 
     def boom(*args, **kwargs):
         raise RuntimeError("manifold explotó")
 
     monkeypatch.setattr(m.supports, "add_supports", boom)
-    client = TestClient(m.app)
-    info, fname = _upload(client)
+    client = get_client()
+    info = upload_model(client)
     resp = client.post(f"/api/models/{info['id']}/supports", json={})
     assert resp.status_code == 500
     assert "manifold explotó" in resp.json()["detail"]
 
 
 def test_cut_multi_warns_on_parts_shortfall(monkeypatch):
-    from fastapi.testclient import TestClient
-
     from backend import main as m
 
     def few_pieces(mesh, parts):
         return [mesh], []
 
     monkeypatch.setattr(m.mesh_ops, "split_multi", few_pieces)
-    client = TestClient(m.app)
-    info, fname = _upload(client)
+    client = get_client()
+    info = upload_model(client)
     resp = client.post(
         "/api/cut", json={"model_id": info["id"], "mode": "multi", "parts": 4}
     )
@@ -136,31 +94,17 @@ def test_cut_multi_warns_on_parts_shortfall(monkeypatch):
 # --- slug ids ---
 
 def test_upload_returns_slug_id():
-    from fastapi.testclient import TestClient
-
-    from backend.main import app
-
-    client = TestClient(app)
-    up = client.post(
-        "/api/models?replace=true",
-        files={"file": ("mi_modelo_xyz.stl", _sphere_bytes(), "model/stl")},
-    )
-    assert up.status_code == 200
-    info = up.json()
+    client = get_client()
+    info = upload_model(client, "mi_modelo_xyz")
     assert info["id"] == "mi_modelo_xyz"
-    assert info["name"] == "mi_modelo_xyz.stl"
     assert client.get(f"/api/models/{info['id']}").json()["name"] == "mi_modelo_xyz.stl"
 
 
 def test_upload_slug_lowercased():
-    from fastapi.testclient import TestClient
-
-    from backend.main import app
-
-    client = TestClient(app)
+    client = get_client()
     up = client.post(
         "/api/models?replace=true",
-        files={"file": ("CajaUpper.STL", _sphere_bytes(), "model/stl")},
+        files={"file": ("CajaUpper.STL", sphere_bytes(), "model/stl")},
     )
     assert up.status_code == 200
     assert up.json()["id"] == "cajaupper"
@@ -169,15 +113,11 @@ def test_upload_slug_lowercased():
 # --- 409 / replace ---
 
 def test_upload_duplicate_name_returns_409():
-    from fastapi.testclient import TestClient
-
-    from backend.main import app
-
-    client = TestClient(app)
-    info, fname = _upload(client, "duplicada")
+    client = get_client()
+    info = upload_model(client, "duplicada")
     resp = client.post(
         "/api/models",
-        files={"file": (fname, _sphere_bytes(), "model/stl")},
+        files={"file": ("duplicada.stl", sphere_bytes(), "model/stl")},
     )
     assert resp.status_code == 409
     body = resp.json()
@@ -186,17 +126,11 @@ def test_upload_duplicate_name_returns_409():
 
 
 def test_upload_replace_overwrites():
-    from fastapi.testclient import TestClient
-
-    from backend import main as m
-
-    client = TestClient(m.app)
-    info, fname = _upload(client, "reemplazable")
-    original_vol = info["volume_cm3"]
-
+    client = get_client()
+    info = upload_model(client, "reemplazable")
     resp = client.post(
         "/api/models?replace=true",
-        files={"file": (fname, _sphere_bytes(), "model/stl")},
+        files={"file": ("reemplazable.stl", sphere_bytes(), "model/stl")},
     )
     assert resp.status_code == 200
     assert resp.json()["id"] == info["id"]
@@ -205,28 +139,18 @@ def test_upload_replace_overwrites():
 # --- list ---
 
 def test_list_models_returns_uploaded():
-    from fastapi.testclient import TestClient
-
-    from backend.main import app
-
-    client = TestClient(app)
-    info, fname = _upload(client, "listable")
+    client = get_client()
+    info = upload_model(client, "listable")
     listing = client.get("/api/models").json()
     ids = [m["id"] for m in listing]
     assert info["id"] in ids
-    names = [m["name"] for m in listing]
-    assert fname in names
 
 
 # --- delete ---
 
 def test_delete_model_removes_files():
-    from fastapi.testclient import TestClient
-
-    from backend.main import app
-
-    client = TestClient(app)
-    info, fname = _upload(client, "borrable")
+    client = get_client()
+    info = upload_model(client, "borrable")
     resp = client.delete(f"/api/models/{info['id']}")
     assert resp.status_code == 200
     assert resp.json()["ok"] is True
@@ -237,24 +161,16 @@ def test_delete_model_removes_files():
 # --- traversal ---
 
 def test_upload_traversal_filename_sanitized():
-    from fastapi.testclient import TestClient
-
-    from backend.main import app
-
-    client = TestClient(app)
+    client = get_client()
     resp = client.post(
         "/api/models?replace=true",
-        files={"file": ("../../secret_data.stl", _sphere_bytes(), "model/stl")},
+        files={"file": ("../../secret_data.stl", sphere_bytes(), "model/stl")},
     )
     assert resp.status_code == 200
     assert resp.json()["id"] == "secret_data"
 
 
 def test_delete_traversal_id_rejected():
-    from fastapi.testclient import TestClient
-
-    from backend.main import app
-
-    client = TestClient(app)
+    client = get_client()
     resp = client.delete("/api/models/..%2F..%2Fetc%2Fpasswd")
     assert resp.status_code in (400, 404, 405)

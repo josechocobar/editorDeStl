@@ -11,7 +11,8 @@ import {
   resize,
   updatePlanePreview,
 } from "./scene.js";
-import { cutModel, deleteModel, generateSupports, listModels, suggestConnector, uploadModel } from "./api.js";
+import { deleteModel, listModels, suggestConnector, uploadModel } from "./api.js";
+import { OPERATIONS } from "./operations.js";
 
 const $ = (id) => document.getElementById(id);
 
@@ -221,18 +222,6 @@ function currentOp() {
   return document.querySelector('input[name="op"]:checked').value;
 }
 
-function supportsPayload() {
-  return {
-    enabled: true,
-    angle: Number($("sup-angle").value),
-    tip_diameter: Number($("sup-tip").value),
-    contact_diameter: Number($("sup-contact").value),
-    spacing: Number($("sup-spacing").value),
-    z_gap: Number($("sup-gap").value),
-    base_thickness: Number($("sup-base").value),
-  };
-}
-
 function persistSession() {
   try {
     const form = {
@@ -335,41 +324,22 @@ dropzone.addEventListener("drop", (e) => {
 
 $("btn-cut").addEventListener("click", async () => {
   const btn = $("btn-cut");
-  const cutting = currentOp() === "cut";
+  const op = currentOp();
+  const opDef = OPERATIONS[op];
   btn.disabled = true;
-  btn.textContent = cutting ? "Cortando…" : "Generando soportes…";
+  btn.textContent = opDef.label + "…";
   try {
-    let data;
-    if (cutting) {
-      data = await cutModel({
-        model_id: state.modelId,
-        mode: currentMode(),
-        axis: state.axis,
-        position: Number($("pos-slider").value) / 100,
-        parts: Number($("parts-input").value),
-        connector: {
-          type: $("conn-type").value,
-          diameter: Number($("conn-dia").value),
-          depth: Number($("conn-depth").value),
-          clearance: Number($("conn-clear").value),
-          count: Number($("conn-count").value),
-        },
-        supports: $("sup-enabled").checked ? supportsPayload() : null,
-      });
-    } else {
-      data = await generateSupports(state.modelId, supportsPayload());
-    }
+    const params = opDef.collectParams();
+    const data = await opDef.execute(state, params);
     state.job = data;
     renderResults(data);
     persistSession();
-    toast(cutting
-      ? `${data.pieces.length} piezas generadas`
-      : "STL con soportes listo para descargar");
+    toast(`${data.pieces.length} pieza${data.pieces.length > 1 ? "s" : ""} generada${data.pieces.length > 1 ? "s" : ""}`);
   } catch (err) {
     toast(String(err.message || err), "error");
   } finally {
     btn.disabled = false;
-    btn.textContent = cutting ? "Cortar modelo" : "Generar soportes";
+    btn.textContent = opDef.label;
   }
 });
 

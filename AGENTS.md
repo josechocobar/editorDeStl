@@ -13,35 +13,37 @@ Backend Python + frontend vanilla sin build step.
 
 ```
 backend/
-  main.py         FastAPI. Endpoints REST + montaje estático de web/.
-                  Modelos pydantic: ConnectorSpec, SupportsParams/SupportsSpec,
-                  CutRequest; helper _export_job (persistencia de jobs).
-  mesh_ops.py     Carga/corte de mallas: load_mesh, model_info,
-                  decimate_for_preview (previews livianos), plane_for,
-                  cut_half (slice + cap), split_multi (recursivo kd).
-  connectors.py   Encastes entre piezas hermanas: suggest (reglas FDM),
-                  compute_sites (valida material en ambas caras),
-                  apply_connector (pin/prism + agujero con holgura).
-  supports.py     Soportes árbol para minis (reglas R1–R10 en
-                  docs/investigacion-soportes.md): find_contact_points
-                  (voladizos por normales), build_support_solids (columnas
-                  que bajan, se fusionan, base común), add_supports (union).
+  main.py           FastAPI. Endpoints REST + montaje estático de web/.
+                    Modelos pydantic: CutRequest(CutParams),
+                    SupportsSpec(SupportsParams).
+  operations/       Patrón operation (lógica de negocio separada de HTTP):
+    __init__.py     OperationResult dataclass (pieces, names, operation, ...).
+    cut.py          CutParams + run(): corte + conectores + soportes.
+    supports.py     SupportsParams + run(): soportes sobre modelo entero.
+  mesh_ops.py       Carga/corte de mallas: load_mesh, model_info,
+                    decimate_for_preview, cut_half, split_multi.
+  connectors.py     Encastes: suggest, compute_sites, apply_connector.
+  supports.py       Soportes árbol: find_contact_points, build_support_solids,
+                    add_supports (reglas R1–R10).
 web/
-  index.html      Panel: 1·Modelo (dropzone) 2·Operación (Cortar en piezas |
-                  Solo soportes; corte: eje/pos/conectores/soportes)
-                  3·Piezas|Resultado (resultados + zip). Viewport + HUD.
-  js/             ES modules sin build step (importmap en index.html):
-    app.js        Entry: estado global, wiring de UI, flows upload/cut/
-                  supports, explode slider, librería de archivos,
-                  sesión persistente (localStorage), dedupe 409,
-                  sugerencia conectores (refreshSuggestion con debounce).
-    scene.js      Three.js puro sin DOM: escena `world` rotada -90° en X
-                  (Z-up modelo vs Y-up escena), updatePlanePreview
-                  (dimensiones por eje, ver problemas/), fitCamera.
-    api.js        Transporte HTTP puro: upload/cut/supports/suggest.
-  vendor/         three.module.js vendoreado (offline).
-tests/            pytest. test_mesh_ops.py (corte/conectores/suggest),
-                  test_supports.py (soportes), test_api_smoke.py (rutas + e2e).
+  index.html        Panel: 1·Modelo (dropzone) 2·Operación (Cortar en piezas |
+                    Solo soportes) 3·Piezas|Resultado (resultados + zip).
+                    Viewport + HUD + loading overlay.
+  js/
+    app.js          Entry: estado global, wiring UI, persistencia sesión,
+                    adoptModel, librería de archivos (CRUD).
+    api.js          Transporte HTTP: uploadModel, cutModel, generateSupports,
+                    listModels, deleteModel, suggestConnector.
+    scene.js        Three.js sin DOM: initScene, fitCamera,
+                    updatePlanePreview (dimensiones por eje).
+    operations.js  Registry de operaciones: OPERATIONS[op] con
+                    collectParams + execute. Para agregar una operación.
+  vendor/           three.module.js vendoreado (offline).
+tests/
+  helpers.py        Shared: sphere_bytes, cube_bytes, upload_model, get_client.
+  test_mesh_ops.py  Corte/conectores/suggest.
+  test_supports.py  Soportes.
+  test_api_smoke.py Rutas + e2e (46 tests).
 samples/          STLs de prueba (caja_con_agujero, esfera, letra_L).
 data/             Runtime: models/ (STL+meta json), jobs/ (piezas por job).
 docs/             investigacion-soportes.md (tipos + reglas vinculantes R1-R10)
@@ -75,6 +77,15 @@ GET  /api/jobs/{job}/zip              zip piezas + {corte|soportes}_info.json
 - Bug resuelto → entrada en `problemas/` ANTES de commitear (skill problema-log).
 - Frontend sin framework ni build: importmap + vendor offline.
 - Determinismo: nada de RNG sin seed en geometría (mismo input → mismo output).
+
+## Adding an operation
+
+1. **Backend**: crear `backend/operations/nueva_op.py` con `Params(NamedTuple)` + `run(mesh, params) -> OperationResult`.
+2. **Endpoint**: agregar modelo pydantic en `main.py` (`NuevaOpRequest(NuevaOpParams)`), endpoint que llama `run()`, retorna `OperationResult`.
+3. **Frontend**: agregar entrada en `web/js/operations.js` → `OPERATIONS["nueva_op"] = { label, collectParams, execute }`.
+4. **UI**: controles HTML en `index.html` (radio pill + fieldset); el botón "Cortar modelo" usa el registry genérico.
+5. **Tests**: test en `tests/test_api_smoke.py` + test de dominio si hay lógica no trivial.
+6. **Commit**: convencional, sin atribución IA.
 
 ## Comandos
 

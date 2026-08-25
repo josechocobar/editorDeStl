@@ -50,25 +50,18 @@ class ConnectorSpec(BaseModel):
     count: int = Field(default=2, ge=1, le=8)
 
 
-class SupportsParams(BaseModel):
-    angle: float = Field(default=50.0, ge=20, le=80)
-    tip_diameter: float = Field(default=0.8, gt=0.2, le=4)
-    contact_diameter: float = Field(default=0.5, ge=0.2, le=3)
-    spacing: float = Field(default=1.8, gt=0.5, le=8)
-    z_gap: float = Field(default=0.2, ge=0, le=2)
-    base_thickness: float = Field(default=1.2, ge=0.4, le=6)
+from backend.operations.supports import SupportsParams
 
 
 class SupportsSpec(SupportsParams):
     enabled: bool = False
 
 
-class CutRequest(BaseModel):
+from backend.operations.cut import CutParams
+
+
+class CutRequest(CutParams):
     model_id: str
-    mode: Literal["half", "multi"] = "half"
-    axis: Literal["x", "y", "z"] = "z"
-    position: float = Field(default=0.5, ge=0.02, le=0.98)
-    parts: int = Field(default=4, ge=2, le=16)
     connector: ConnectorSpec = ConnectorSpec()
     supports: Optional[SupportsSpec] = None
 
@@ -268,7 +261,8 @@ def add_model_supports(model_id: str, spec: SupportsParams):
     meta = json.loads(meta_path.read_text())
     try:
         mesh = mesh_ops.load_mesh(stl_path)
-        supported, sup_info = supports.add_supports(mesh, spec.model_dump())
+        from backend.operations.supports import run as run_supports
+        result = run_supports(mesh, spec, _slug(meta.get("name") or "modelo"))
     except supports.SupportError as exc:
         raise HTTPException(422, str(exc)) from exc
     except ValueError as exc:
@@ -276,13 +270,11 @@ def add_model_supports(model_id: str, spec: SupportsParams):
     except Exception as exc:
         logger.exception("fallo la generación de soportes de %s", model_id)
         raise HTTPException(500, f"Error procesando la malla: {exc}") from exc
-    logger.info("soportes modelo %s: %d puntas, %d ramas",
-                model_id, sup_info["tips"], sup_info["branches"])
-    base = _slug(meta.get("name") or "modelo")
     job_meta = _export_job(
-        [supported], [f"{base}_con_soportes.stl"], base, "soportes",
+        result.pieces, result.names, _slug(meta.get("name") or "modelo"),
+        result.operation,
         request_dump={"model_id": model_id, **spec.model_dump()},
-        supports_meta=[{"index": 0, **sup_info}],
+        supports_meta=result.supports_meta,
     )
     logger.info("job %s listo: modelo con soportes", job_meta["job_id"])
     return job_meta
@@ -294,79 +286,29 @@ def cut_model(req: CutRequest):
     meta = json.loads(meta_path.read_text())
     try:
         mesh = mesh_ops.load_mesh(stl_path)
-        if req.mode == "half":
-            pieces, splits = mesh_ops.cut_half(mesh, req.axis, req.position)
-            logger.info("corte mitad eje=%s pos=%.2f", req.axis, req.position)
-        else:
-            pieces, splits = mesh_ops.split_multi(mesh, req.parts)
-            logger.info("corte multiple partes=%d", req.parts)
+        from backend.operations.cut import run as run_cut
+        result = run_cut(
+            mesh,
+            req,
+            connector_spec=req.connector,
+            supports_spec=req.supports,
+            model_name=_slug(meta.get("name") or "modelo"),
+        )
     except ValueError as exc:
         raise HTTPException(400, str(exc)) from exc
     except Exception as exc:
         logger.exception("fallo el corte de %s", req.model_id)
         raise HTTPException(500, f"Error procesando la malla: {exc}") from exc
-
-    warnings = []
-    if req.mode == "multi" and len(pieces) < req.parts:
-        warnings.append(
-            f"Se generaron {len(pieces)} de {req.parts} partes: el modelo no "
-            f"admite más cortes en esa dirección"
-        )
-        logger.info("split_multi corto: %d/%d partes", len(pieces), req.parts)
-    conn_meta = None
-    spec = req.connector
-    if spec.type != "none":
-        for split in splits:
-            a_idx, b_idx = split["a_index"], split["b_index"]
-            origin = np.array(split["origin"])
-            normal = np.array(split["normal"])
-            try:
-                sites = connectors.compute_sites(
-                    pieces[a_idx], pieces[b_idx], origin, normal,
-                    spec.count, spec.diameter, spec.depth,
-                )
-                pieces[a_idx], pieces[b_idx], conn_meta = connectors.apply_connector(
-                    pieces[a_idx], pieces[b_idx], origin, normal,
-                    sites, spec.type, spec.diameter, spec.depth, spec.clearance,
-                )
-                if len(sites) < spec.count:
-                    warnings.append(
-                        f"Corte {a_idx + 1}-{b_idx + 1}: se ubicaron {len(sites)} de "
-                        f"{spec.count} conectores (material compartido insuficiente en la cara)"
-                    )
-                split["connector"] = {
-                    "type": spec.type,
-                    "sites_mm": [[round(float(c), 2) for c in s] for s in sites],
-                    **conn_meta,
-                }
-            except connectors.ConnectorError as exc:
-                warnings.append(f"Conectores omitidos en corte {a_idx + 1}-{b_idx + 1}: {exc}")
-                logger.warning("conector falló: %s", exc)
-
-    supports_meta = []
-    if req.supports and req.supports.enabled:
-        spec = req.supports.model_dump()
-        for i, piece in enumerate(pieces):
-            try:
-                pieces[i], sup_info = supports.add_supports(piece, spec)
-                supports_meta.append({"index": i, **sup_info})
-                logger.info("soportes pieza %d: %d puntas, %d ramas",
-                            i, sup_info["tips"], sup_info["branches"])
-            except supports.SupportError as exc:
-                warnings.append(f"Soportes omitidos en pieza {i + 1}: {exc}")
-                logger.warning("soportes fallaron en pieza %d: %s", i, exc)
-
     base = _slug(meta.get("name") or "modelo")
-    names = [f"{base}_pieza_{i + 1}_de_{len(pieces)}.stl" for i in range(len(pieces))]
     job_meta = _export_job(
-        pieces, names, base, "corte",
+        result.pieces, result.names, base, result.operation,
         request_dump=req.model_dump(),
-        splits=splits,
-        supports_meta=supports_meta,
-        warnings=warnings,
+        splits=result.splits,
+        supports_meta=result.supports_meta,
+        warnings=result.warnings,
     )
     logger.info("job %s listo: %d piezas, %d avisos",
-                job_meta["job_id"], len(pieces), len(warnings))
+                job_meta["job_id"], len(result.pieces), len(result.warnings))
     return job_meta
 
 
