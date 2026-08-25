@@ -11,7 +11,7 @@ from typing import Literal, Optional
 import numpy as np
 from fastapi import FastAPI, File, HTTPException, Query, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import FileResponse, Response
+from fastapi.responses import FileResponse, JSONResponse, Response
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field
 
@@ -73,8 +73,11 @@ class CutRequest(BaseModel):
     supports: Optional[SupportsSpec] = None
 
 
+_ID_RE = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._ -]{0,79}$")
+
+
 def _model_paths(model_id: str):
-    if not model_id.isalnum() or len(model_id) > 40:
+    if not _ID_RE.fullmatch(model_id):
         raise HTTPException(400, "model_id inválido")
     stl = MODELS_DIR / f"{model_id}.stl"
     meta = MODELS_DIR / f"{model_id}.json"
@@ -84,9 +87,9 @@ def _model_paths(model_id: str):
 
 
 def _slug(name: str) -> str:
-    base = name.rsplit(".", 1)[0]
-    slug = re.sub(r"[^\w\-]+", "_", base, flags=re.UNICODE).strip("_")
-    return slug or "modelo"
+    base = Path(name).stem
+    slug = re.sub(r"[^\w\-]+", "_", base, flags=re.UNICODE).strip("._ ")
+    return slug[:80].lower() or "modelo"
 
 
 def _preview_response(stl_path: Path, download_name: Optional[str] = None):
@@ -103,12 +106,30 @@ def _preview_response(stl_path: Path, download_name: Optional[str] = None):
 
 
 @app.post("/api/models")
-async def upload_model(file: UploadFile = File(...)):
+async def upload_model(file: UploadFile = File(...), replace: bool = Query(False)):
     if not file.filename or not file.filename.lower().endswith(".stl"):
         raise HTTPException(400, "Solo se aceptan archivos .stl")
     raw = await file.read()
     if len(raw) > 200 * 1024 * 1024:
         raise HTTPException(400, "Archivo demasiado grande (máx 200 MB)")
+
+    model_id = _slug(file.filename)
+    stl_path = MODELS_DIR / f"{model_id}.stl"
+    meta_path = MODELS_DIR / f"{model_id}.json"
+    preview_path = stl_path.with_suffix(".preview.stl")
+
+    if stl_path.exists() and not replace:
+        existing = {}
+        if meta_path.exists():
+            existing = json.loads(meta_path.read_text())
+        return JSONResponse(
+            status_code=409,
+            content={
+                "detail": f"Ya existe '{file.filename}'",
+                "existing": existing,
+            },
+        )
+
     tmp = MODELS_DIR / f"tmp_{uuid.uuid4().hex}.stl"
     MODELS_DIR.mkdir(parents=True, exist_ok=True)
     tmp.write_bytes(raw)
@@ -121,20 +142,45 @@ async def upload_model(file: UploadFile = File(...)):
     finally:
         tmp.unlink(missing_ok=True)
 
-    model_id = uuid.uuid4().hex[:12]
-    stl_path = MODELS_DIR / f"{model_id}.stl"
     stl_path.write_bytes(raw)
     info = mesh_ops.model_info(mesh)
     meta = {"id": model_id, "name": file.filename, **info}
-    (MODELS_DIR / f"{model_id}.json").write_text(json.dumps(meta))
+    meta_path.write_text(json.dumps(meta))
+    preview_path.unlink(missing_ok=True)
     logger.info("modelo subido %s (%s)", file.filename, info["dims_mm"])
     return meta
+
+
+@app.get("/api/models")
+def list_models():
+    MODELS_DIR.mkdir(parents=True, exist_ok=True)
+    items = []
+    for p in sorted(MODELS_DIR.glob("*.json"), key=lambda f: f.stat().st_mtime, reverse=True):
+        try:
+            items.append(json.loads(p.read_text()))
+        except Exception:
+            logger.warning("meta corrupta: %s", p.name)
+    return items
 
 
 @app.get("/api/models/{model_id}")
 def get_model(model_id: str):
     _, meta_path = _model_paths(model_id)
     return json.loads(meta_path.read_text())
+
+
+@app.delete("/api/models/{model_id}")
+def delete_model(model_id: str):
+    if not _ID_RE.fullmatch(model_id):
+        raise HTTPException(400, "model_id inválido")
+    stl = MODELS_DIR / f"{model_id}.stl"
+    meta = MODELS_DIR / f"{model_id}.json"
+    preview = stl.with_suffix(".preview.stl")
+    if not stl.exists() and not meta.exists():
+        raise HTTPException(404, "Modelo no encontrado")
+    for p in (stl, meta, preview):
+        p.unlink(missing_ok=True)
+    return {"ok": True}
 
 
 @app.get("/api/models/{model_id}/file")
