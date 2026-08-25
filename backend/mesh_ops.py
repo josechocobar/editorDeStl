@@ -102,7 +102,8 @@ def split_multi(mesh, parts):
         normal[axis] = 1.0
         a = trimesh.intersections.slice_mesh_plane(parent, -normal, mid, cap=True)
         b = trimesh.intersections.slice_mesh_plane(parent, normal, mid, cap=True)
-        if len(a.faces) < 12 or len(b.faces) < 12:
+        if (len(a.faces) < 12 or len(b.faces) < 12
+                or min(abs(a.volume), abs(b.volume)) < abs(parent.volume) * 1e-3):
             nodes.append(parent)
             break
         idx_a = len(nodes)
@@ -115,6 +116,6 @@ def split_multi(mesh, parts):
             "normal": normal.tolist(),
         })
 
-    if len(nodes) < parts:
-        pass
+    # Best-effort: puede devolver menos de `parts` si no queda ningún corte
+    # sano; los splits siempre referencian índices de la lista devuelta.
     return nodes[:parts], splits

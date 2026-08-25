@@ -261,6 +261,12 @@ def cut_model(req: CutRequest):
         raise HTTPException(500, f"Error procesando la malla: {exc}") from exc
 
     warnings = []
+    if req.mode == "multi" and len(pieces) < req.parts:
+        warnings.append(
+            f"Se generaron {len(pieces)} de {req.parts} partes: el modelo no "
+            f"admite más cortes en esa dirección"
+        )
+        logger.info("split_multi corto: %d/%d partes", len(pieces), req.parts)
     conn_meta = None
     spec = req.connector
     if spec.type != "none":

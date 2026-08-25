@@ -48,6 +48,27 @@ def test_split_multi_sphere_four_parts():
     assert total == pytest.approx(abs(sphere.volume), rel=1e-3)
 
 
+def test_split_multi_shortfall_keeps_splits_consistent():
+    """Si no se llega a las partes pedidas, devuelve menos piezas pero los
+    splits referencian solo índices existentes (nada de meta huérfano)."""
+    slab = trimesh.creation.box(extents=[60, 60, 5])
+    pieces, splits = mesh_ops.split_multi(slab, 16)
+    assert 2 <= len(pieces) <= 16
+    for s in splits:
+        assert s["a_index"] < len(pieces)
+        assert s["b_index"] < len(pieces)
+
+
+def test_split_multi_air_cut_stops_cleanly():
+    """Corte que no divide material (una cara vacía o volumen fantasma)
+    corta el loop en vez de colarse en el resultado."""
+    slab = trimesh.creation.box(extents=[60, 60, 4])
+    slab.apply_translation([0, 0, 50])
+    pieces, _ = mesh_ops.split_multi(slab, 16)
+    total = sum(abs(p.volume) for p in pieces)
+    assert total == pytest.approx(abs(slab.volume), rel=1e-2)
+
+
 def test_pin_connector_watertight_and_fits():
     box = trimesh.creation.box(extents=[40, 40, 20])
     low = trimesh.intersections.slice_mesh_plane(

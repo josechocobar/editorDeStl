@@ -109,3 +109,27 @@ def test_supports_endpoint_returns_informative_500(monkeypatch):
     resp = client.post(f"/api/models/{model_id}/supports", json={})
     assert resp.status_code == 500
     assert "manifold explotó" in resp.json()["detail"]
+
+
+def test_cut_multi_warns_on_parts_shortfall(monkeypatch):
+    from fastapi.testclient import TestClient
+
+    from backend import main as m
+
+    def few_pieces(mesh, parts):
+        return [mesh], []
+
+    monkeypatch.setattr(m.mesh_ops, "split_multi", few_pieces)
+    client = TestClient(m.app)
+    up = client.post(
+        "/api/models",
+        files={"file": ("esfera_test.stl", _sphere_bytes(), "model/stl")},
+    )
+    model_id = up.json()["id"]
+    resp = client.post(
+        "/api/cut", json={"model_id": model_id, "mode": "multi", "parts": 4}
+    )
+    assert resp.status_code == 200
+    data = resp.json()
+    assert len(data["pieces"]) == 1
+    assert any("1 de 4 partes" in w for w in data["warnings"])
