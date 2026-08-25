@@ -12,6 +12,8 @@ SINK_MM = 0.4
 MAX_CONTACTS = 600
 MAX_BRANCH_RADIUS = 3.5
 TIP_CONE_LEN = 1.2
+STEP_DOWN_MM = 4.0  # descenso por nivel del árbol (R1/R2)
+FUSE_RADIUS_MM = 2.5  # umbral de fusión de columnas cercanas (R2)
 
 
 class SupportError(ValueError):
@@ -145,8 +147,6 @@ def build_support_solids(mesh, contacts, tip_diameter, z_gap, base_thickness=1.2
     pad_top = bed_z + float(base_thickness)
     embed = max(float(base_thickness) - SINK_MM, float(base_thickness) / 2.0)
     tip_r = tip_diameter / 2.0
-    dz = 4.0
-    fuse_r = 2.5
 
     columns = []
     for p in contacts:
@@ -166,7 +166,7 @@ def build_support_solids(mesh, contacts, tip_diameter, z_gap, base_thickness=1.2
         progressed = False
         for c in active:
             limit = c.target_z if c.target_z is not None else bed_z + embed
-            nz = max(limit, c.z - dz)
+            nz = max(limit, c.z - STEP_DOWN_MM)
             if nz < c.z - 1e-9:
                 progressed = True
             seg = _tapered_segment([c.xy[0], c.xy[1], c.z], c.r,
@@ -201,7 +201,7 @@ def build_support_solids(mesh, contacts, tip_diameter, z_gap, base_thickness=1.2
             for j in range(i + 1, len(pool)):
                 cj = pool[j]
                 if not used[j] and all(
-                    float(np.linalg.norm(cj.xy - g.xy)) < fuse_r for g in group
+                    float(np.linalg.norm(cj.xy - g.xy)) < FUSE_RADIUS_MM for g in group
                 ):
                     group.append(cj)
                     used[j] = True

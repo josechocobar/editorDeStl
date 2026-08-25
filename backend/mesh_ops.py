@@ -1,5 +1,6 @@
 import numpy as np
 import trimesh
+import fast_simplification
 
 AXES = {"x": 0, "y": 1, "z": 2}
 MIN_FACE_RATIO = 0.01
@@ -30,7 +31,6 @@ PREVIEW_MAX_TRIS = 120_000
 def decimate_for_preview(mesh, target_tris=PREVIEW_MAX_TRIS):
     if len(mesh.faces) <= target_tris:
         return mesh
-    import fast_simplification
 
     pts, fac = fast_simplification.simplify(
         mesh.vertices, mesh.faces, target_count=target_tris

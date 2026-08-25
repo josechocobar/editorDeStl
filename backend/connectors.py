@@ -120,6 +120,8 @@ def compute_sites(piece_male, piece_female, origin, normal, count, diameter, dep
                 valid.append(base)
 
     min_dist = diameter * 1.7
+    # Goloso O(n²) aceptable: `valid` son decenas de candidatos (grilla sobre
+    # la cara), nunca miles.
     chosen = []
     for cand in valid:
         if all(float(np.linalg.norm(cand - c)) >= min_dist for c in chosen):
