@@ -39,21 +39,6 @@ function onResize() {
 window.addEventListener("resize", onResize);
 onResize();
 
-function loadOriginal(url) {
-  loadSTL(
-    url,
-    (geo) => {
-      clearGroup([state.originalMesh, ...state.pieceMeshes]);
-      state.pieceMeshes = [];
-      planePreview.visible = false;
-      state.originalMesh = addMeshFromGeometry(geo, 0x7aa2ff, []);
-      fitCamera(state.originalMesh);
-      $("hud").classList.add("hidden");
-    },
-    () => toast("No se pudo leer el STL desde el servidor", "error")
-  );
-}
-
 let suggestTimer = null;
 
 async function refreshSuggestion() {
@@ -95,6 +80,31 @@ function toast(msg, kind = "info") {
   el.className = kind;
   clearTimeout(toastTimer);
   toastTimer = setTimeout(() => el.classList.add("hidden"), kind === "error" ? 7000 : 3500);
+}
+
+function setLoading(on, msg = "Cargando…") {
+  $("loading-msg").textContent = msg;
+  $("loading").classList.toggle("hidden", !on);
+}
+
+function loadOriginal(url) {
+  setLoading(true, "Cargando modelo…");
+  loadSTL(
+    url,
+    (geo) => {
+      clearGroup([state.originalMesh, ...state.pieceMeshes]);
+      state.pieceMeshes = [];
+      planePreview.visible = false;
+      state.originalMesh = addMeshFromGeometry(geo, 0x7aa2ff, []);
+      fitCamera(state.originalMesh);
+      $("hud").classList.add("hidden");
+      setLoading(false);
+    },
+    () => {
+      setLoading(false);
+      toast("No se pudo leer el STL desde el servidor", "error");
+    }
+  );
 }
 
 async function upload(file) {
@@ -297,8 +307,27 @@ function showPieces(job) {
 
   const globalCenter = new THREE.Vector3();
   const centers = [];
+  const total = job.pieces.length;
+  let ok = 0;
+  let done = 0;
 
-  let loaded = 0;
+  function settle() {
+    done++;
+    if (done < total) return;
+    setLoading(false);
+    if (ok === total) {
+      globalCenter.divideScalar(total);
+      state.pieceMeshes.forEach((m, j) => {
+        const d = centers[j].clone().sub(globalCenter);
+        if (d.lengthSq() < 1e-6) d.set(0, 0, 1);
+        m.userData.explodeDir = d.normalize();
+      });
+      applyExplode();
+      fitCameraToPieces(state.pieceMeshes);
+    }
+  }
+
+  setLoading(true, total > 1 ? `Cargando ${total} piezas…` : "Cargando pieza…");
   job.pieces.forEach((p, i) => {
     loadSTL(
       `${p.file_url}/preview`,
@@ -306,24 +335,18 @@ function showPieces(job) {
         addMeshFromGeometry(geo, PALETTE[i % PALETTE.length], state.pieceMeshes);
         centers[i] = geo.boundingBox.getCenter(new THREE.Vector3());
         globalCenter.add(centers[i]);
-        loaded++;
-        if (loaded === job.pieces.length) {
-          globalCenter.divideScalar(job.pieces.length);
-          state.pieceMeshes.forEach((m, j) => {
-            const d = centers[j].clone().sub(globalCenter);
-            if (d.lengthSq() < 1e-6) d.set(0, 0, 1);
-            m.userData.explodeDir = d.normalize();
-          });
-          applyExplode();
-          fitCameraToPieces(state.pieceMeshes);
-        }
+        ok++;
+        settle();
       },
-      () => toast("No se pudo leer el STL desde el servidor", "error")
+      () => {
+        toast("No se pudo leer el STL desde el servidor", "error");
+        settle();
+      }
     );
   });
 
   $("hud").classList.remove("hidden");
-  $("explode-box").classList.toggle("hidden", job.pieces.length < 2);
+  $("explode-box").classList.toggle("hidden", total < 2);
   $("btn-original").classList.remove("hidden");
 }
 
