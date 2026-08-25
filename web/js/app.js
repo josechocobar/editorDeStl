@@ -1,6 +1,17 @@
 import * as THREE from "three";
-import { OrbitControls } from "three/addons/controls/OrbitControls.js";
-import { STLLoader } from "three/addons/loaders/STLLoader.js";
+import {
+  PALETTE,
+  addMeshFromGeometry,
+  clearGroup,
+  fitCamera,
+  fitCameraToPieces,
+  initScene,
+  loadSTL,
+  planePreview,
+  resize,
+  updatePlanePreview,
+} from "./scene.js";
+import { cutModel, generateSupports, suggestConnector, uploadModel } from "./api.js";
 
 const $ = (id) => document.getElementById(id);
 
@@ -9,8 +20,6 @@ window.addEventListener("error", (e) => {
   if (el && !el.classList.contains("hidden")) return;
   console.error(e.error || e.message);
 });
-
-const PALETTE = [0x4f8cff, 0xff8c42, 0x41d18c, 0xc56cf0, 0xffd166, 0x4ecdc4, 0xff6b81, 0xa3a1fb];
 
 const state = {
   modelId: null,
@@ -21,181 +30,62 @@ const state = {
   axis: "z",
 };
 
-const scene = new THREE.Scene();
-scene.background = new THREE.Color(0x0d0f12);
+initScene($("c"));
 
-const camera = new THREE.PerspectiveCamera(45, 1, 0.1, 5000);
-camera.position.set(120, 90, 140);
-
-const renderer = new THREE.WebGLRenderer({ canvas: $("c"), antialias: true });
-renderer.setPixelRatio(Math.min(devicePixelRatio, 2));
-
-const controls = new OrbitControls(camera, renderer.domElement);
-controls.enableDamping = true;
-
-const world = new THREE.Group();
-world.rotation.x = -Math.PI / 2;
-scene.add(world);
-
-const grid = new THREE.GridHelper(400, 40, 0x2a2e37, 0x1c1f26);
-scene.add(grid);
-
-scene.add(new THREE.HemisphereLight(0xbfd4ff, 0x30281f, 1.1));
-const dir = new THREE.DirectionalLight(0xffffff, 1.6);
-dir.position.set(150, 220, 120);
-scene.add(dir);
-const dir2 = new THREE.DirectionalLight(0xffffff, 0.5);
-dir2.position.set(-140, -60, -160);
-scene.add(dir2);
-
-const planePreview = new THREE.Mesh(
-  new THREE.PlaneGeometry(1, 1),
-  new THREE.MeshBasicMaterial({
-    color: 0xff5566,
-    transparent: true,
-    opacity: 0.28,
-    side: THREE.DoubleSide,
-    depthWrite: false,
-  })
-);
-planePreview.visible = false;
-world.add(planePreview);
-
-function resize() {
+function onResize() {
   const box = $("viewport").getBoundingClientRect();
-  renderer.setSize(box.width, box.height, false);
-  camera.aspect = box.width / box.height;
-  camera.updateProjectionMatrix();
+  resize(box.width, box.height);
 }
-window.addEventListener("resize", resize);
-resize();
-
-renderer.setAnimationLoop(() => {
-  controls.update();
-  renderer.render(scene, camera);
-});
-
-function fitCamera(obj) {
-  const sphere = new THREE.Box3().setFromObject(obj).getBoundingSphere(new THREE.Sphere());
-  if (!sphere.radius) return;
-  const dist = (sphere.radius / Math.sin((camera.fov * Math.PI) / 360)) * 1.05;
-  const dirV = new THREE.Vector3(1, 0.65, 1).normalize();
-  camera.position.copy(sphere.center).addScaledVector(dirV, dist);
-  camera.near = Math.max(dist / 100, 0.1);
-  camera.far = dist * 20;
-  camera.updateProjectionMatrix();
-  controls.target.copy(sphere.center);
-}
-
-function clearGroup(list) {
-  for (const m of list) {
-    if (!m) continue;
-    world.remove(m);
-    m.geometry.dispose();
-    m.material.dispose();
-  }
-}
-
-const loader = new STLLoader();
-
-function addMeshFromGeometry(geo, color, list) {
-  geo.computeBoundingBox();
-  const mat = new THREE.MeshStandardMaterial({
-    color,
-    flatShading: true,
-    roughness: 0.55,
-    metalness: 0.05,
-  });
-  const mesh = new THREE.Mesh(geo, mat);
-  world.add(mesh);
-  list.push(mesh);
-  return mesh;
-}
-
-function loadSTL(url, onLoad) {
-  loader.load(url, onLoad, undefined, (err) => {
-    console.error("STLLoader:", err);
-    toast("No se pudo leer el STL desde el servidor", "error");
-  });
-}
+window.addEventListener("resize", onResize);
+onResize();
 
 function loadOriginal(url) {
-  loadSTL(url, (geo) => {
-    clearGroup([state.originalMesh, ...state.pieceMeshes]);
-    state.pieceMeshes = [];
-    planePreview.visible = false;
-    state.originalMesh = addMeshFromGeometry(geo, 0x7aa2ff, []);
-    fitCamera(state.originalMesh);
-    updatePlanePreview();
-    $("hud").classList.add("hidden");
-  });
+  loadSTL(
+    url,
+    (geo) => {
+      clearGroup([state.originalMesh, ...state.pieceMeshes]);
+      state.pieceMeshes = [];
+      planePreview.visible = false;
+      state.originalMesh = addMeshFromGeometry(geo, 0x7aa2ff, []);
+      fitCamera(state.originalMesh);
+      $("hud").classList.add("hidden");
+    },
+    () => toast("No se pudo leer el STL desde el servidor", "error")
+  );
 }
 
 let suggestTimer = null;
 
-async function fetchSuggestion() {
+async function refreshSuggestion() {
   if (!state.modelId || currentOp() !== "cut" || $("conn-type").value === "none") return;
-  try {
-    const params = new URLSearchParams({
-      axis: state.axis,
-      position: String(Number($("pos-slider").value) / 100),
-      mode: currentMode(),
-    });
-    const res = await fetch(`/api/models/${state.modelId}/suggest-connector?${params}`);
-    if (!res.ok) return;
-    const sug = await res.json();
-    $("conn-dia").value = sug.diameter_mm;
-    $("conn-depth").value = sug.depth_mm;
-    $("conn-count").value = sug.count;
-    const el = $("conn-suggest");
-    el.textContent = `Sugerido (${sug.basis}): cara ${sug.face_mm[0]}×${sug.face_mm[1]} mm · `
-      + `espesor mín. ${sug.thickness_mm} mm → ⌀${sug.diameter_mm} mm × prof. ${sug.depth_mm} mm × ${sug.count}`;
-    el.hidden = false;
-  } catch {
-    /* sugerencia es best-effort */
-  }
+  const sug = await suggestConnector(state.modelId, {
+    axis: state.axis,
+    position: String(Number($("pos-slider").value) / 100),
+    mode: currentMode(),
+  });
+  if (!sug) return;
+  $("conn-dia").value = sug.diameter_mm;
+  $("conn-depth").value = sug.depth_mm;
+  $("conn-count").value = sug.count;
+  const el = $("conn-suggest");
+  el.textContent = `Sugerido (${sug.basis}): cara ${sug.face_mm[0]}×${sug.face_mm[1]} mm · `
+    + `espesor mín. ${sug.thickness_mm} mm → ⌀${sug.diameter_mm} mm × prof. ${sug.depth_mm} mm × ${sug.count}`;
+  el.hidden = false;
 }
 
 function scheduleSuggestion() {
   clearTimeout(suggestTimer);
-  suggestTimer = setTimeout(fetchSuggestion, 300);
+  suggestTimer = setTimeout(refreshSuggestion, 300);
 }
 
-const AXIS_VEC = { x: [1, 0, 0], y: [0, 1, 0], z: [0, 0, 1] };
-
-function updatePlanePreview() {
-  if (!state.originalMesh || currentOp() !== "cut" || currentMode() !== "half") {
+function updatePlanePreviewFromState() {
+  const show = state.originalMesh && currentOp() === "cut" && currentMode() === "half";
+  if (!show) {
     planePreview.visible = false;
     return;
   }
-  const box = state.originalMesh.geometry.boundingBox;
-  const axis = state.axis;
-  const lo = box.min[axis];
-  const span = box.max[axis] - lo;
   const frac = Number($("pos-slider").value) / 100;
-
-  let w, h;
-  if (axis === "x") {
-    w = box.max.z - box.min.z;
-    h = box.max.y - box.min.y;
-  } else if (axis === "y") {
-    w = box.max.x - box.min.x;
-    h = box.max.z - box.min.z;
-  } else {
-    w = box.max.x - box.min.x;
-    h = box.max.y - box.min.y;
-  }
-  planePreview.geometry.dispose();
-  planePreview.geometry = new THREE.PlaneGeometry(w * 1.04, h * 1.04);
-
-  planePreview.rotation.set(0, 0, 0);
-  if (axis === "x") planePreview.rotation.y = Math.PI / 2;
-  if (axis === "y") planePreview.rotation.x = -Math.PI / 2;
-
-  const c = box.getCenter(new THREE.Vector3());
-  planePreview.position.set(c.x, c.y, c.z);
-  planePreview.position[axis] = lo + frac * span;
-  planePreview.visible = true;
+  updatePlanePreview(state.originalMesh.geometry, state.axis, frac);
 }
 
 let toastTimer = null;
@@ -210,11 +100,7 @@ function toast(msg, kind = "info") {
 async function upload(file) {
   setStatusSubiendo(true);
   try {
-    const fd = new FormData();
-    fd.append("file", file);
-    const res = await fetch("/api/models", { method: "POST", body: fd });
-    if (!res.ok) throw new Error((await res.json()).detail || "Error subiendo");
-    const info = await res.json();
+    const info = await uploadModel(file);
     state.modelId = info.id;
     state.info = info;
     $("m-name").textContent = info.name;
@@ -229,7 +115,7 @@ async function upload(file) {
     $("btn-cut").disabled = false;
     $("results-card").classList.add("hidden");
     loadOriginal(`/api/models/${info.id}/preview`);
-    fetchSuggestion();
+    refreshSuggestion();
     toast(`Modelo cargado: ${info.name}`);
   } catch (err) {
     toast(String(err.message || err), "error");
@@ -270,9 +156,8 @@ function updateOperationUI() {
   $("sup-toggle-field").classList.toggle("hidden", !cutting);
   $("sup-fields").classList.toggle("hidden", cutting ? !$("sup-enabled").checked : false);
   $("btn-cut").textContent = cutting ? "Cortar modelo" : "Generar soportes";
-  if (!cutting) planePreview.visible = false;
-  updatePlanePreview();
-  if (cutting) fetchSuggestion();
+  updatePlanePreviewFromState();
+  if (cutting) refreshSuggestion();
 }
 
 document.querySelectorAll('input[name="op"]').forEach((r) =>
@@ -285,8 +170,8 @@ document.querySelectorAll('input[name="mode"]').forEach((r) =>
     $("field-axis").classList.toggle("hidden", !half);
     $("field-pos").classList.toggle("hidden", !half);
     $("field-parts").classList.toggle("hidden", half);
-    updatePlanePreview();
-    fetchSuggestion();
+    updatePlanePreviewFromState();
+    refreshSuggestion();
   })
 );
 
@@ -295,20 +180,20 @@ document.querySelectorAll(".seg button").forEach((b) =>
     document.querySelectorAll(".seg button").forEach((x) => x.classList.remove("active"));
     b.classList.add("active");
     state.axis = b.dataset.axis;
-    updatePlanePreview();
-    fetchSuggestion();
+    updatePlanePreviewFromState();
+    refreshSuggestion();
   })
 );
 
 $("pos-slider").addEventListener("input", () => {
   $("pos-val").value = `${$("pos-slider").value}%`;
-  updatePlanePreview();
+  updatePlanePreviewFromState();
   scheduleSuggestion();
 });
 
 $("conn-type").addEventListener("change", () => {
   $("conn-fields").classList.toggle("hidden", $("conn-type").value === "none");
-  fetchSuggestion();
+  refreshSuggestion();
 });
 
 $("sup-enabled").addEventListener("change", () => {
@@ -334,15 +219,13 @@ dropzone.addEventListener("drop", (e) => {
 
 $("btn-cut").addEventListener("click", async () => {
   const btn = $("btn-cut");
-  const op = currentOp();
-  const cutting = op === "cut";
+  const cutting = currentOp() === "cut";
   btn.disabled = true;
   btn.textContent = cutting ? "Cortando…" : "Generando soportes…";
   try {
-    let url, body;
+    let data;
     if (cutting) {
-      url = "/api/cut";
-      body = {
+      data = await cutModel({
         model_id: state.modelId,
         mode: currentMode(),
         axis: state.axis,
@@ -356,18 +239,10 @@ $("btn-cut").addEventListener("click", async () => {
           count: Number($("conn-count").value),
         },
         supports: $("sup-enabled").checked ? supportsPayload() : null,
-      };
+      });
     } else {
-      url = `/api/models/${state.modelId}/supports`;
-      body = supportsPayload();
+      data = await generateSupports(state.modelId, supportsPayload());
     }
-    const res = await fetch(url, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(body),
-    });
-    const data = await res.json();
-    if (!res.ok) throw new Error(data.detail || "Error procesando");
     state.job = data;
     renderResults(data);
     toast(cutting
@@ -425,47 +300,31 @@ function showPieces(job) {
 
   let loaded = 0;
   job.pieces.forEach((p, i) => {
-    loadSTL(`${p.file_url}/preview`, (geo) => {
-      const mesh = addMeshFromGeometry(geo, PALETTE[i % PALETTE.length], state.pieceMeshes);
-      const c = geo.boundingBox.getCenter(new THREE.Vector3());
-      centers[i] = c;
-      globalCenter.add(c);
-      loaded++;
-      if (loaded === job.pieces.length) {
-        globalCenter.divideScalar(job.pieces.length);
-        state.pieceMeshes.forEach((m, j) => {
-          const d = centers[j].clone().sub(globalCenter);
-          if (d.lengthSq() < 1e-6) d.set(0, 0, 1);
-          m.userData.explodeDir = d.normalize();
-        });
-        applyExplode();
-        fitCameraToPieces();
-      }
-    });
+    loadSTL(
+      `${p.file_url}/preview`,
+      (geo) => {
+        addMeshFromGeometry(geo, PALETTE[i % PALETTE.length], state.pieceMeshes);
+        centers[i] = geo.boundingBox.getCenter(new THREE.Vector3());
+        globalCenter.add(centers[i]);
+        loaded++;
+        if (loaded === job.pieces.length) {
+          globalCenter.divideScalar(job.pieces.length);
+          state.pieceMeshes.forEach((m, j) => {
+            const d = centers[j].clone().sub(globalCenter);
+            if (d.lengthSq() < 1e-6) d.set(0, 0, 1);
+            m.userData.explodeDir = d.normalize();
+          });
+          applyExplode();
+          fitCameraToPieces(state.pieceMeshes);
+        }
+      },
+      () => toast("No se pudo leer el STL desde el servidor", "error")
+    );
   });
 
   $("hud").classList.remove("hidden");
   $("explode-box").classList.toggle("hidden", job.pieces.length < 2);
   $("btn-original").classList.remove("hidden");
-}
-
-function fitCameraToPieces() {
-  const box = new THREE.Box3();
-  const tmp = new THREE.Box3();
-  for (const m of state.pieceMeshes) {
-    m.updateWorldMatrix(true, false);
-    tmp.copy(m.geometry.boundingBox).applyMatrix4(m.matrixWorld);
-    box.union(tmp);
-  }
-  const sphere = box.getBoundingSphere(new THREE.Sphere());
-  if (!sphere.radius) return;
-  const dist = (sphere.radius / Math.sin((camera.fov * Math.PI) / 360)) * 1.05;
-  const dirV = new THREE.Vector3(1, 0.65, 1).normalize();
-  camera.position.copy(sphere.center).addScaledVector(dirV, dist);
-  camera.near = Math.max(dist / 100, 0.1);
-  camera.far = dist * 20;
-  camera.updateProjectionMatrix();
-  controls.target.copy(sphere.center);
 }
 
 function applyExplode() {
@@ -482,7 +341,7 @@ $("btn-original").addEventListener("click", () => {
   if (showingPieces) {
     state.pieceMeshes.forEach((m) => (m.visible = false));
     if (state.originalMesh) state.originalMesh.visible = true;
-    planePreview.visible = currentOp() === "cut" && currentMode() === "half";
+    updatePlanePreviewFromState();
     $("btn-original").textContent = "Ver piezas";
     if (state.originalMesh) fitCamera(state.originalMesh);
   } else {
@@ -490,6 +349,6 @@ $("btn-original").addEventListener("click", () => {
     planePreview.visible = false;
     state.pieceMeshes.forEach((m) => (m.visible = true));
     $("btn-original").textContent = "Ver original";
-    fitCameraToPieces();
+    fitCameraToPieces(state.pieceMeshes);
   }
 });

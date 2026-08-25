@@ -103,7 +103,7 @@ backend/
   mesh_ops.py    carga, info, corte por plano, split recursivo, previews
   connectors.py  sitios de encastre + primitivas pin/prisma + booleanos
   supports.py    detección de voladizos + árbol de soportes + base común
-web/             index.html, style.css, app.js, vendor/ (three.js local)
+web/             index.html, style.css, js/ (ES modules), vendor/ (three.js local)
 tests/           pytest del motor de corte, conectores, soportes y API
 samples/         STLs de ejemplo para probar
 docs/            investigación y reglas de soportes

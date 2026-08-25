@@ -30,10 +30,14 @@ web/
   index.html      Panel: 1·Modelo (dropzone) 2·Operación (Cortar en piezas |
                   Solo soportes; corte: eje/pos/conectores/soportes)
                   3·Piezas|Resultado (resultados + zip). Viewport + HUD.
-  app.js          Three.js: escena `world` rotada -90° en X (Z-up modelo vs
-                  Y-up escena), updatePlanePreview (dimensiones por eje, ver
-                  problemas/), upload/cut/supports flows, explode slider,
-                  sugerencia de conectores (fetchSuggestion con debounce).
+  js/             ES modules sin build step (importmap en index.html):
+    app.js        Entry: estado global, wiring de UI, flows upload/cut/
+                  supports, explode slider, sugerencia conectores
+                  (refreshSuggestion con debounce).
+    scene.js      Three.js puro sin DOM: escena `world` rotada -90° en X
+                  (Z-up modelo vs Y-up escena), updatePlanePreview
+                  (dimensiones por eje, ver problemas/), fitCamera.
+    api.js        Transporte HTTP puro: upload/cut/supports/suggest.
   vendor/         three.module.js vendoreado (offline).
 tests/            pytest. test_mesh_ops.py (corte/conectores/suggest),
                   test_supports.py (soportes), test_api_smoke.py (rutas + e2e).
@@ -74,7 +78,7 @@ GET  /api/jobs/{job}/zip              zip piezas + {corte|soportes}_info.json
 pytest -q                            # tests desde la raíz
 uvicorn backend.main:app --reload    # dev server
 docker compose up --build            # deploy
-node --check web/app.js              # sintaxis frontend (no hay linter JS)
+for f in web/js/*.js; do node --check "${f%.js}.mjs" 2>/dev/null || node --check --input-type=module < "$f"; done  # sintaxis frontend (copiar como .mjs: node trata .js como CommonJS)
 ```
 
 ## Gotchas conocidos
