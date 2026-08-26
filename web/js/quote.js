@@ -28,6 +28,37 @@ export function formatCurrency(v) {
   return "$ " + v.toLocaleString("es-AR", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 }
 
+export function getDensity() {
+  const sel = document.getElementById("q-material");
+  if (!sel) return 1.24;
+  const custom = document.getElementById("q-density");
+  if (sel.value === "0") return Number(custom?.value) || 1.24;
+  return Number(sel.value);
+}
+
+export function calcWeight(volumeCm3) {
+  return volumeCm3 * getDensity();
+}
+
+export function calcTimeHours(volumeCm3, infillPct, layerHeightMm, speedMmS) {
+  if (!volumeCm3 || !speedMmS || !layerHeightMm) return 0;
+  const nozzleMm = 0.4;
+  const infillFactor = infillPct / 100;
+  const materialVol = volumeCm3 * infillFactor;
+  const depositedVolPerSec = speedMmS * layerHeightMm * nozzleMm / 1000;
+  if (depositedVolPerSec <= 0) return 0;
+  const hours = (materialVol / depositedVolPerSec) / 3600 * 1.3;
+  return Math.round(hours * 10) / 10;
+}
+
+export function formatTime(hours) {
+  if (!hours || hours <= 0) return "—";
+  const h = Math.floor(hours);
+  const m = Math.round((hours - h) * 60);
+  if (h === 0) return `${m}min`;
+  return m > 0 ? `${h}h ${m}min` : `${h}h`;
+}
+
 export function quoteCalc(config, input) {
   const machineHr = config.machine_life_hrs > 0 ? config.machine_cost / config.machine_life_hrs : 0;
   const energyHr = (config.power_watts / 1000) * config.electricity_kwh;

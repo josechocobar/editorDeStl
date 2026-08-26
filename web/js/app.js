@@ -13,7 +13,7 @@ import {
 } from "./scene.js";
 import { deleteModel, listModels, suggestConnector, uploadModel } from "./api.js";
 import { OPERATIONS } from "./operations.js";
-import { quoteCalc, loadConfig, saveConfig, formatCurrency, downloadPDF, downloadPNG } from "./quote.js";
+import { quoteCalc, loadConfig, saveConfig, formatCurrency, downloadPDF, downloadPNG, getDensity, calcWeight, calcTimeHours, formatTime } from "./quote.js";
 
 const $ = (id) => document.getElementById(id);
 
@@ -576,6 +576,24 @@ function collectQuoteConfig() {
   };
 }
 
+function recalcFromSTL() {
+  const isSTL = document.querySelector('input[name="quote-mode"]:checked')?.value === "stl";
+  if (!isSTL || !state.info) return;
+  const vol = state.info.volume_cm3 || 0;
+  const weight = Math.round(calcWeight(vol) * 10) / 10;
+  $("quote-stl-vol").value = vol;
+  $("quote-stl-weight").value = weight;
+  $("quote-grams").value = weight;
+  const infill = Number($("q-infill").value) || 20;
+  const layer = Number($("q-layer").value) || 0.2;
+  const speed = Number($("q-speed").value) || 60;
+  const hours = calcTimeHours(vol, infill, layer, speed);
+  $("q-time").value = formatTime(hours);
+  $("quote-hours").value = Math.floor(hours);
+  $("quote-minutes").value = Math.round((hours - Math.floor(hours)) * 60);
+  updateQuoteResults();
+}
+
 function updateQuoteResults() {
   const config = collectQuoteConfig();
   const input = collectQuoteInput();
@@ -604,6 +622,7 @@ function populateQuoteConfig(cfg) {
 function initQuote() {
   const cfg = loadConfig();
   populateQuoteConfig(cfg);
+  recalcFromSTL();
   updateQuoteResults();
 }
 
@@ -613,18 +632,27 @@ document.querySelectorAll('input[name="quote-mode"]').forEach((r) =>
     $("quote-stl-info").classList.toggle("hidden", !stl);
     $("quote-grams-field").classList.toggle("hidden", stl);
     if (stl && state.info) {
-      const vol = state.info.volume_cm3 || 0;
-      const weight = Math.round(vol * 1.24);
       $("quote-stl-model").textContent = `Modelo: ${state.info.name}`;
-      $("quote-stl-vol").value = vol;
-      $("quote-stl-vol-out").textContent = vol.toFixed(1);
-      $("quote-stl-weight").value = weight;
-      $("quote-stl-weight-out").textContent = weight;
-      $("quote-grams").value = weight;
-      updateQuoteResults();
+      recalcFromSTL();
     }
   })
 );
+
+$("q-material")?.addEventListener("change", () => {
+  const isCustom = $("q-material").value === "0";
+  $("q-density-custom-field").classList.toggle("hidden", !isCustom);
+  recalcFromSTL();
+  updateQuoteResults();
+});
+
+$("q-density")?.addEventListener("input", () => {
+  recalcFromSTL();
+  updateQuoteResults();
+});
+
+["q-infill", "q-layer", "q-speed"].forEach((id) => {
+  $(id)?.addEventListener("input", recalcFromSTL);
+});
 
 ["quote-hours", "quote-minutes", "quote-grams", "quote-difficulty",
  "q-cfg-machine", "q-cfg-life", "q-cfg-kwh", "q-cfg-watts",

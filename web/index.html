@@ -184,14 +184,13 @@
           <div class="grid2">
             <div class="field">
               <label class="lbl" for="quote-stl-vol">Volumen (cm³)</label>
-              <input type="number" id="quote-stl-vol" min="0" step="0.1" placeholder="auto" />
+              <input type="number" id="quote-stl-vol" min="0" step="0.01" readonly />
             </div>
             <div class="field">
               <label class="lbl" for="quote-stl-weight">Peso estimado (g)</label>
-              <input type="number" id="quote-stl-weight" min="0" step="1" placeholder="auto" />
+              <input type="number" id="quote-stl-weight" min="0" step="0.1" />
             </div>
           </div>
-          <p class="hint">Densidad PLA: 1.24 g/cm³. Editá si usás otro material.</p>
           <hr />
         </div>
 
@@ -217,6 +216,43 @@
               <option value="1.5">Media — soportes moderados, riesgo warping</option>
               <option value="2.0">Compleja — soportes intensivos, geometrías orgánicas</option>
             </select>
+          </div>
+        </div>
+
+        <hr />
+        <h3>Material e impresion</h3>
+        <div class="grid2">
+          <div class="field">
+            <label class="lbl" for="q-material">Material</label>
+            <select id="q-material">
+              <option value="1.24" selected>PLA (1.24 g/cm³)</option>
+              <option value="1.04">ABS (1.04 g/cm³)</option>
+              <option value="1.27">PETG (1.27 g/cm³)</option>
+              <option value="1.10">TPU (1.10 g/cm³)</option>
+              <option value="1.30">ASA (1.30 g/cm³)</option>
+              <option value="1.40">Nylon (1.40 g/cm³)</option>
+              <option value="0">Custom…</option>
+            </select>
+          </div>
+          <div class="field hidden" id="q-density-custom-field">
+            <label class="lbl" for="q-density">Densidad (g/cm³)</label>
+            <input type="number" id="q-density" min="0.1" max="5" step="0.01" value="1.24" />
+          </div>
+          <div class="field">
+            <label class="lbl" for="q-infill">Relleno (%)</label>
+            <input type="number" id="q-infill" min="5" max="100" step="5" value="20" />
+          </div>
+          <div class="field">
+            <label class="lbl" for="q-layer">Altura de capa (mm)</label>
+            <input type="number" id="q-layer" min="0.05" max="0.4" step="0.05" value="0.2" />
+          </div>
+          <div class="field">
+            <label class="lbl" for="q-speed">Velocidad (mm/s)</label>
+            <input type="number" id="q-speed" min="10" max="200" step="5" value="60" />
+          </div>
+          <div class="field">
+            <label class="lbl" for="q-time">Tiempo estimado</label>
+            <input type="text" id="q-time" readonly class="time-est" />
           </div>
         </div>
 

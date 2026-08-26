@@ -204,6 +204,8 @@ a.secondary { background: var(--card); border: 1px solid var(--accent); color: v
 #quote-config-toggle summary::before { content: "\25B6"; display: inline-block; margin-right: 6px; font-size: 9px; transition: transform .15s; }
 #quote-config-toggle[open] summary::before { transform: rotate(90deg); }
 
+.time-est { background: var(--accent); color: #fff; font-weight: 700; border-color: var(--accent); text-align: center; }
+
 .hidden { display: none !important; }
 
 @media (max-width: 760px) {
