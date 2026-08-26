@@ -57,7 +57,6 @@ function adoptForm(form) {
   $("conn-depth").value = form.conn.depth;
   $("conn-clear").value = form.conn.clear;
   $("conn-count").value = form.conn.count;
-  $("sup-enabled").checked = form.supEnabled;
   $("sup-angle").value = form.sup.angle;
   $("sup-tip").value = form.sup.tip;
   $("sup-contact").value = form.sup.contact;
@@ -177,6 +176,7 @@ function adoptModel(info) {
   $("drop").querySelector("strong").textContent = `✓ ${info.name}`;
   $("model-card").classList.remove("hidden");
   $("btn-cut").disabled = false;
+  $("btn-supports").disabled = false;
   $("results-card").classList.add("hidden");
   loadOriginal(`/api/models/${info.id}/preview`);
   refreshSuggestion();
@@ -236,7 +236,6 @@ function persistSession() {
         clear: Number($("conn-clear").value),
         count: Number($("conn-count").value),
       },
-      supEnabled: $("sup-enabled").checked,
       sup: {
         angle: Number($("sup-angle").value),
         tip: Number($("sup-tip").value),
@@ -259,18 +258,17 @@ function persistSession() {
 function updateOperationUI() {
   const op = currentOp();
   const cutting = op === "cut";
+  const supporting = op === "supports";
   const quoting = op === "quote";
-  $("cut-controls").classList.toggle("hidden", quoting);
-  $("sup-toggle-field").classList.toggle("hidden", !cutting);
-  $("sup-fields").classList.toggle("hidden", cutting ? !$("sup-enabled").checked : false);
-  $("btn-cut").classList.toggle("hidden", quoting);
+  $("cut-controls").classList.toggle("hidden", !cutting);
+  $("sup-controls").classList.toggle("hidden", !supporting);
+  $("btn-cut").classList.toggle("hidden", quoting || supporting);
   $("quote-card").classList.toggle("hidden", !quoting);
   if (!quoting) {
     $("results-card").classList.toggle("hidden", !$("results-card").dataset.hasResults);
   } else {
     $("results-card").classList.add("hidden");
   }
-  $("btn-cut").textContent = cutting ? "Cortar modelo" : "Generar soportes";
   updatePlanePreviewFromState();
   if (cutting) refreshSuggestion();
   if (quoting) initQuote();
@@ -312,10 +310,6 @@ $("conn-type").addEventListener("change", () => {
   refreshSuggestion();
 });
 
-$("sup-enabled").addEventListener("change", () => {
-  updateOperationUI();
-});
-
 $("file-input").addEventListener("change", (e) => {
   if (e.target.files[0]) upload(e.target.files[0]);
 });
@@ -335,13 +329,11 @@ dropzone.addEventListener("drop", (e) => {
 
 $("btn-cut").addEventListener("click", async () => {
   const btn = $("btn-cut");
-  const op = currentOp();
-  const opDef = OPERATIONS[op];
   btn.disabled = true;
-  btn.textContent = opDef.label + "…";
+  btn.textContent = "Cortando…";
   try {
-    const params = opDef.collectParams();
-    const data = await opDef.execute(state, params);
+    const params = OPERATIONS.cut.collectParams();
+    const data = await OPERATIONS.cut.execute(state, params);
     state.job = data;
     renderResults(data);
     persistSession();
@@ -350,7 +342,26 @@ $("btn-cut").addEventListener("click", async () => {
     toast(String(err.message || err), "error");
   } finally {
     btn.disabled = false;
-    btn.textContent = opDef.label;
+    btn.textContent = "Cortar modelo";
+  }
+});
+
+$("btn-supports").addEventListener("click", async () => {
+  const btn = $("btn-supports");
+  btn.disabled = true;
+  btn.textContent = "Generando…";
+  try {
+    const params = OPERATIONS.supports.collectParams();
+    const data = await OPERATIONS.supports.execute(state, params);
+    state.job = data;
+    renderResults(data);
+    persistSession();
+    toast("STL con soportes listo para descargar");
+  } catch (err) {
+    toast(String(err.message || err), "error");
+  } finally {
+    btn.disabled = false;
+    btn.textContent = "Generar soportes";
   }
 });
 
@@ -518,6 +529,7 @@ $("lib-list").addEventListener("click", async (e) => {
         $("results-card").classList.add("hidden");
         $("hud").classList.add("hidden");
         $("btn-cut").disabled = true;
+        $("btn-supports").disabled = true;
         $("drop").querySelector("strong").textContent = "Subí tu .stl";
         localStorage.removeItem("stlfiles.session.v1");
       }

@@ -75,71 +75,65 @@
             </label>
           </div>
 
-        <div class="field" id="field-axis">
-          <span class="lbl">Eje del plano</span>
-          <div class="seg">
-            <button type="button" data-axis="x">X</button>
-            <button type="button" data-axis="y">Y</button>
-            <button type="button" data-axis="z" class="active">Z</button>
-          </div>
-        </div>
-
-        <div class="field" id="field-pos">
-          <label class="lbl" for="pos-slider">
-            Posición del plano <output id="pos-val">50%</output>
-          </label>
-          <input type="range" id="pos-slider" min="2" max="98" value="50" />
-        </div>
-
-        <div class="field hidden" id="field-parts">
-          <label class="lbl" for="parts-input">Cantidad de partes (2–16)</label>
-          <input type="number" id="parts-input" min="2" max="16" value="4" />
-          <p class="hint">Se divide recursivamente por el eje más largo de cada pieza.</p>
-        </div>
-
-        <hr />
-        <h3>Conectores de encastre</h3>
-        <div class="field">
-          <label class="lbl" for="conn-type">Forma</label>
-          <select id="conn-type">
-            <option value="none">Sin conectores</option>
-            <option value="pin" selected>Cilindro (pin + agujero)</option>
-            <option value="prism">Prisma (espiga cuadrada)</option>
-          </select>
-        </div>
-        <div id="conn-fields">
-          <div class="grid2">
-            <div class="field">
-              <label class="lbl" for="conn-dia">Diámetro/lado (mm)</label>
-              <input type="number" id="conn-dia" min="2" max="30" step="0.5" value="6" />
-            </div>
-            <div class="field">
-              <label class="lbl" for="conn-count">Cantidad por corte</label>
-              <input type="number" id="conn-count" min="1" max="8" value="2" />
-            </div>
-            <div class="field">
-              <label class="lbl" for="conn-depth">Profundidad enchufe (mm)</label>
-              <input type="number" id="conn-depth" min="2" max="40" step="0.5" value="8" />
-            </div>
-            <div class="field">
-              <label class="lbl" for="conn-clear">Holgura (mm)</label>
-              <input type="number" id="conn-clear" min="0" max="1" step="0.05" value="0.25" />
+          <div class="field" id="field-axis">
+            <span class="lbl">Eje del plano</span>
+            <div class="seg">
+              <button type="button" data-axis="x">X</button>
+              <button type="button" data-axis="y">Y</button>
+              <button type="button" data-axis="z" class="active">Z</button>
             </div>
           </div>
-          <p class="hint" id="conn-suggest" hidden></p>
-          <p class="hint">El agujero se agranda según la holgura para que encaje impreso en FDM.</p>
-        </div>
+
+          <div class="field" id="field-pos">
+            <label class="lbl" for="pos-slider">
+              Posición del plano <output id="pos-val">50%</output>
+            </label>
+            <input type="range" id="pos-slider" min="2" max="98" value="50" />
+          </div>
+
+          <div class="field hidden" id="field-parts">
+            <label class="lbl" for="parts-input">Cantidad de partes (2–16)</label>
+            <input type="number" id="parts-input" min="2" max="16" value="4" />
+            <p class="hint">Se divide recursivamente por el eje más largo de cada pieza.</p>
+          </div>
+
+          <hr />
+          <h3>Conectores de encastre</h3>
+          <div class="field">
+            <label class="lbl" for="conn-type">Forma</label>
+            <select id="conn-type">
+              <option value="none">Sin conectores</option>
+              <option value="pin" selected>Cilindro (pin + agujero)</option>
+              <option value="prism">Prisma (espiga cuadrada)</option>
+            </select>
+          </div>
+          <div id="conn-fields">
+            <div class="grid2">
+              <div class="field">
+                <label class="lbl" for="conn-dia">Diámetro/lado (mm)</label>
+                <input type="number" id="conn-dia" min="2" max="30" step="0.5" value="6" />
+              </div>
+              <div class="field">
+                <label class="lbl" for="conn-count">Cantidad por corte</label>
+                <input type="number" id="conn-count" min="1" max="8" value="2" />
+              </div>
+              <div class="field">
+                <label class="lbl" for="conn-depth">Profundidad enchufe (mm)</label>
+                <input type="number" id="conn-depth" min="2" max="40" step="0.5" value="8" />
+              </div>
+              <div class="field">
+                <label class="lbl" for="conn-clear">Holgura (mm)</label>
+                <input type="number" id="conn-clear" min="0" max="1" step="0.05" value="0.25" />
+              </div>
+            </div>
+            <p class="hint" id="conn-suggest" hidden></p>
+            <p class="hint">El agujero se agranda según la holgura para que encaje impreso en FDM.</p>
+          </div>
+
+          <button id="btn-cut" class="primary" disabled>Cortar modelo</button>
         </div>
 
-        <hr />
-        <h3>Soportes para minis</h3>
-        <div class="field" id="sup-toggle-field">
-          <label class="radio-pill">
-            <input type="checkbox" id="sup-enabled" />
-            <span>Agregar soportes árbol</span>
-          </label>
-        </div>
-        <div id="sup-fields" class="hidden">
+        <div id="sup-controls" class="hidden">
           <div class="grid2">
             <div class="field">
               <label class="lbl" for="sup-angle">Ángulo voladizo (°)</label>
@@ -167,9 +161,8 @@
             </div>
           </div>
           <p class="hint">Ramas de 0.8 mm que bajan del voladizo, se fusionan y nacen de una base común.</p>
+          <button id="btn-supports" class="primary" disabled>Generar soportes</button>
         </div>
-
-        <button id="btn-cut" class="primary" disabled>Cortar modelo</button>
       </section>
 
       <section class="card hidden" id="quote-card">
@@ -188,15 +181,17 @@
 
         <div id="quote-stl-info" class="hidden">
           <p class="hint" id="quote-stl-model">Modelo cargado: —</p>
-          <div class="field">
-            <label class="lbl" for="quote-stl-vol">Volumen (cm³) <output id="quote-stl-vol-out">—</output></label>
-            <input type="number" id="quote-stl-vol" min="0" step="0.1" placeholder="auto del modelo" />
+          <div class="grid2">
+            <div class="field">
+              <label class="lbl" for="quote-stl-vol">Volumen (cm³)</label>
+              <input type="number" id="quote-stl-vol" min="0" step="0.1" placeholder="auto" />
+            </div>
+            <div class="field">
+              <label class="lbl" for="quote-stl-weight">Peso estimado (g)</label>
+              <input type="number" id="quote-stl-weight" min="0" step="1" placeholder="auto" />
+            </div>
           </div>
-          <div class="field">
-            <label class="lbl" for="quote-stl-weight">Peso estimado (g) <output id="quote-stl-weight-out">—</output></label>
-            <input type="number" id="quote-stl-weight" min="0" step="1" placeholder="auto del modelo" />
-          </div>
-          <p class="hint">Densidad PLA: 1.24 g/cm³. Editá el peso si usás otro material.</p>
+          <p class="hint">Densidad PLA: 1.24 g/cm³. Editá si usás otro material.</p>
           <hr />
         </div>
 
@@ -210,27 +205,27 @@
               <label class="lbl" for="quote-minutes">Tiempo (minutos)</label>
               <input type="number" id="quote-minutes" min="0" max="59" step="1" value="0" />
             </div>
-            <div class="field" id="quote-grams-field">
-              <label class="lbl" for="quote-grams">Material (gramos)</label>
-              <input type="number" id="quote-grams" min="0" step="1" value="0" />
-            </div>
-            <div class="field">
-              <label class="lbl" for="quote-difficulty">Dificultad</label>
-              <select id="quote-difficulty">
-                <option value="1.0">Simple x1.0</option>
-                <option value="1.5">Media x1.5</option>
-                <option value="2.0">Compleja x2.0</option>
-              </select>
-            </div>
+          </div>
+          <div class="field" id="quote-grams-field">
+            <label class="lbl" for="quote-grams">Material consumido (gramos)</label>
+            <input type="number" id="quote-grams" min="0" step="1" value="0" />
+          </div>
+          <div class="field">
+            <label class="lbl" for="quote-difficulty">Dificultad de la pieza</label>
+            <select id="quote-difficulty">
+              <option value="1.0">Simple — llaveros, logos, cajas</option>
+              <option value="1.5">Media — soportes moderados, riesgo warping</option>
+              <option value="2.0">Compleja — soportes intensivos, geometrías orgánicas</option>
+            </select>
           </div>
         </div>
 
         <hr />
         <details id="quote-config-toggle">
-          <summary class="lbl">Configuracion de costos</summary>
+          <summary class="lbl">Mis costos y variables</summary>
           <div id="quote-config-fields" class="grid2">
             <div class="field">
-              <label class="lbl" for="q-cfg-machine">Costo maquina ($)</label>
+              <label class="lbl" for="q-cfg-machine">Costo impresora ($)</label>
               <input type="number" id="q-cfg-machine" min="0" step="1000" />
             </div>
             <div class="field">
@@ -242,7 +237,7 @@
               <input type="number" id="q-cfg-kwh" min="0" step="1" />
             </div>
             <div class="field">
-              <label class="lbl" for="q-cfg-watts">Potencia (W)</label>
+              <label class="lbl" for="q-cfg-watts">Potencia impresora (W)</label>
               <input type="number" id="q-cfg-watts" min="0" step="10" />
             </div>
             <div class="field">
@@ -256,6 +251,7 @@
             <div class="field">
               <label class="lbl" for="q-cfg-filament">Filamento ($/kg)</label>
               <input type="number" id="q-cfg-filament" min="0" step="100" />
+              <span class="hint">Precio por kilogramo de filamento</span>
             </div>
             <div class="field">
               <label class="lbl" for="q-cfg-profit">Ganancia (%)</label>
@@ -277,8 +273,8 @@
         </div>
 
         <div class="row modes" style="margin-top:12px">
-          <button id="btn-quote-pdf" class="secondary" style="flex:1">PDF</button>
-          <button id="btn-quote-png" class="secondary" style="flex:1">PNG</button>
+          <button id="btn-quote-pdf" class="secondary" style="flex:1">Descargar PDF</button>
+          <button id="btn-quote-png" class="secondary" style="flex:1">Descargar PNG</button>
         </div>
       </section>
 

@@ -13,9 +13,7 @@ function collectCutParams() {
       clearance: Number(document.getElementById("conn-clear").value),
       count: Number(document.getElementById("conn-count").value),
     },
-    supports: document.getElementById("sup-enabled").checked
-      ? collectSupportsParams()
-      : null,
+    supports: null,
   };
 }
 
