@@ -44,10 +44,10 @@ export function calcTimeHours(volumeCm3, infillPct, layerHeightMm, speedMmS) {
   if (!volumeCm3 || !speedMmS || !layerHeightMm) return 0;
   const nozzleMm = 0.4;
   const infillFactor = infillPct / 100;
-  const materialVol = volumeCm3 * infillFactor;
-  const depositedVolPerSec = speedMmS * layerHeightMm * nozzleMm / 1000;
+  const materialVolMm3 = volumeCm3 * 1000 * infillFactor;
+  const depositedVolPerSec = speedMmS * layerHeightMm * nozzleMm;
   if (depositedVolPerSec <= 0) return 0;
-  const hours = (materialVol / depositedVolPerSec) / 3600 * 1.3;
+  const hours = (materialVolMm3 / depositedVolPerSec) / 3600 * 1.3;
   return Math.round(hours * 10) / 10;
 }
 
