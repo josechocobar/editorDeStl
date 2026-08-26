@@ -15,6 +15,8 @@ import {
 import { deleteModel, listModels, suggestConnector, uploadModel } from "./api.js";
 import { OPERATIONS } from "./operations.js";
 import { quoteCalc, loadConfig, saveConfig, formatCurrency, downloadPDF, downloadPNG, getDensity, calcWeight, calcTimeHours, formatTime } from "./quote.js";
+import { ViewportModels } from "./viewport-models.js";
+import { renderViewportPanel } from "./viewport-panel.js";
 
 const $ = (id) => document.getElementById(id);
 
@@ -31,8 +33,11 @@ const state = {
   originalMesh: null,
   pieceMeshes: [],
   axis: "z",
-  selectedModels: [],  // [{id, name, dims_mm, volume_cm3}]
+  selectedModels: [],  // [{id, name, dims_mm, volume_cm3}] — legacy, now backed by viewportModels
 };
+
+const vm = new ViewportModels;
+let vpPanel = null;
 
 const SESSION_KEY = "stlfiles.session.v1";
 function readSession() { try { return JSON.parse(localStorage.getItem(SESSION_KEY)); } catch { return null; } }
@@ -91,6 +96,46 @@ async function restoreSession() {
 
 initScene($("c"));
 
+function initViewportPanel() {
+  const container = $("viewport-panel");
+  if (!container) return;
+  vpPanel = renderViewportPanel(container, vm, {
+    onToggleVisible(id) {
+      vm.toggleVisible(id);
+      const m = vm.get(id);
+      if (m?.mesh) m.mesh.visible = m.visible;
+      vpPanel.render();
+    },
+    onToggleSelect(id) {
+      vm.toggleSelected(id);
+      syncSelectedModels();
+      recalcFromSTL();
+      vpPanel.render();
+    },
+    onRemove(id) {
+      const removed = vm.remove(id);
+      if (removed?.mesh) {
+        clearGroup([removed.mesh]);
+      }
+      syncSelectedModels();
+      recalcFromSTL();
+      vpPanel.render();
+    },
+  });
+}
+
+function syncSelectedModels() {
+  state.selectedModels = vm.getSelected().map((m) => ({
+    id: m.id, name: m.name, dims_mm: m.dims_mm, volume_cm3: m.volume_cm3,
+  }));
+}
+
+function addToViewport(info, mesh) {
+  if (vm.has(info.id)) return;
+  vm.add({ id: info.id, name: info.name, dims_mm: info.dims_mm, volume_cm3: info.volume_cm3, mesh });
+  if (vpPanel) vpPanel.render();
+}
+
 function onResize() {
   const box = $("viewport").getBoundingClientRect();
   resize(box.width, box.height);
@@ -146,16 +191,17 @@ function setLoading(on, msg = "Cargando…") {
   $("loading").classList.toggle("hidden", !on);
 }
 
-function loadOriginal(url) {
+function loadOriginal(url, info) {
   setLoading(true, "Cargando modelo…");
   loadSTL(
     url,
     (geo) => {
-      clearGroup([state.originalMesh, ...state.pieceMeshes]);
+      const mesh = addMeshFromGeometry(geo, 0x7aa2ff, []);
+      state.originalMesh = mesh;
       state.pieceMeshes = [];
       planePreview.visible = false;
-      state.originalMesh = addMeshFromGeometry(geo, 0x7aa2ff, []);
-      fitCamera(state.originalMesh);
+      if (info) addToViewport(info, mesh);
+      fitCamera(mesh);
       $("hud").classList.add("hidden");
       setLoading(false);
     },
@@ -180,7 +226,8 @@ function adoptModel(info) {
   $("btn-cut").disabled = false;
   $("btn-supports").disabled = false;
   $("results-card").classList.add("hidden");
-  loadOriginal(`/api/models/${info.id}/preview`);
+  if (!vpPanel) initViewportPanel();
+  loadOriginal(`/api/models/${info.id}/preview`, info);
   refreshSuggestion();
   persistSession();
   recalcFromSTL();
@@ -522,6 +569,9 @@ $("lib-list").addEventListener("click", async (e) => {
     try {
       await deleteModel(id);
       toast(`"${name}" eliminado`);
+      const removed = vm.remove(id);
+      if (removed?.mesh) clearGroup([removed.mesh]);
+      if (vpPanel) vpPanel.render();
       if (id === state.modelId) {
         clearGroup([state.originalMesh, ...state.pieceMeshes]);
         state.originalMesh = null;
@@ -538,6 +588,8 @@ $("lib-list").addEventListener("click", async (e) => {
         $("drop").querySelector("strong").textContent = "Subí tu .stl";
         localStorage.removeItem("stlfiles.session.v1");
       }
+      syncSelectedModels();
+      recalcFromSTL();
       refreshLibrary();
     } catch {
       toast("No se pudo borrar", "error");
