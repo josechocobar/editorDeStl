@@ -1,6 +1,6 @@
 """Generación de PDF y PNG para presupuestos de impresión 3D.
 
-Estética: Persona 5 / cyber-comic / neobrutalista.
+Estética: oscura minimalista, acentos cyan, números grandes.
 Funciones puras: reciben QuoteResult, devuelven bytes.
 """
 from __future__ import annotations
@@ -10,14 +10,17 @@ import io
 
 from backend.quote import QuoteResult
 
-# ── Paleta Persona 5 ──────────────────────────────────────────
-RED = (230, 57, 70)        # #E63946
-BLACK = (13, 13, 13)       # #0D0D0D
-DARK_BG = (26, 26, 46)     # #1A1A2E
-WHITE = (255, 255, 255)
-GOLD = (255, 215, 0)       # #FFD700
-LIGHT_GRAY = (180, 180, 180)
-MID_GRAY = (100, 100, 100)
+# ── Paleta oscura minimalista ────────────────────────────────
+BG_DARK = (15, 23, 42)       # #0F172A
+BG_CARD = (30, 41, 59)       # #1E293B
+CYAN = (6, 182, 212)         # #06B6D4
+CYAN_DIM = (8, 145, 178)     # #0891B2
+WHITE = (248, 250, 252)      # #F8FAFC
+SLATE_300 = (203, 213, 225)  # #CBD5E1
+SLATE_400 = (148, 163, 184)  # #94A3B8
+SLATE_500 = (100, 116, 139)  # #64748B
+SLATE_700 = (51, 65, 85)     # #334155
+EMERALD = (16, 185, 129)     # #10B981
 
 
 def _fmt(value: float) -> str:
@@ -25,16 +28,14 @@ def _fmt(value: float) -> str:
 
 
 def _diff_detail(d: float):
-    """Devuelve (label, description, pct_str) para el nivel de dificultad."""
     if d <= 1.0:
-        return "SIMPLE", "Llaveros, logos, cajas simples", "0%"
+        return "Simple", "Llaveros, logos, cajas simples", "0%"
     if d <= 1.5:
-        return "MEDIA", "Soportes moderados, riesgo de warping", "+50%"
-    return "COMPLEJA", "Soportes intensivos, geometrias organicas", "+100%"
+        return "Media", "Soportes moderados, riesgo de warping", "+50%"
+    return "Compleja", "Soportes intensivos, geometrias organicas", "+100%"
 
 
 def _decode_image(b64: str) -> bytes | None:
-    """Decodifica base64 (con o sin prefijo data:) a bytes PNG."""
     if not b64:
         return None
     if "," in b64:
@@ -46,204 +47,189 @@ def _decode_image(b64: str) -> bytes | None:
 
 
 # ═══════════════════════════════════════════════════════════════
-#  PDF — Estilo Persona 5 / Neobrutalista
+#  PDF — Estilo oscuro minimalista
 # ═══════════════════════════════════════════════════════════════
 
 def generate_pdf(quote: QuoteResult) -> bytes:
     from fpdf import FPDF
 
-    class P5PDF(FPDF):
-        """PDF con estilo cyberpunk: barras rojas, bordes gruesos."""
-
-        def _red_bar(self, y: float, h: float = 3):
-            self.set_fill_color(*RED)
+    class DarkPDF(FPDF):
+        def _accent_bar(self, y: float, h: float = 2):
+            self.set_fill_color(*CYAN)
             self.rect(0, y, 210, h, "F")
             return y + h
 
-        def _section_title(self, title: str, y: float) -> float:
-            # fondo negro + texto rojo
-            self.set_fill_color(*BLACK)
-            self.rect(10, y, 190, 10, "F")
-            self.set_font("Helvetica", "B", 11)
-            self.set_text_color(*RED)
+        def _section(self, title: str, y: float) -> float:
+            self.set_fill_color(*BG_CARD)
+            self.rect(10, y, 190, 9, "F")
+            self.set_font("Helvetica", "B", 10)
+            self.set_text_color(*CYAN)
             self.set_xy(14, y + 1)
-            self.cell(0, 8, title.upper())
-            self.set_text_color(*BLACK)
-            return y + 12
+            self.cell(0, 7, title)
+            self.set_text_color(*WHITE)
+            return y + 11
 
-        def _thick_line(self, y: float):
-            self.set_draw_color(*BLACK)
-            self.set_line_width(0.8)
-            self.line(10, y, 200, y)
-            self.set_line_width(0.2)
+        def _row(self, label: str, value: str, y: float,
+                 label_color=SLATE_400, value_color=WHITE,
+                 label_size=9, value_size=9, value_font=""):
+            self.set_font("Helvetica", "", label_size)
+            self.set_text_color(*label_color)
+            self.set_xy(14, y)
+            self.cell(50, 6, label)
+            self.set_font("Helvetica", value_font, value_size)
+            self.set_text_color(*value_color)
+            self.set_x(66)
+            self.cell(0, 6, value, new_x="LMARGIN", new_y="NEXT")
+            return y + 7
 
-    pdf = P5PDF()
+    pdf = DarkPDF()
     pdf.set_auto_page_break(auto=True, margin=15)
     pdf.add_page()
 
-    # ── Barra roja superior ──
-    pdf.set_fill_color(*RED)
-    pdf.rect(0, 0, 210, 6, "F")
+    # fondo oscuro
+    pdf.set_fill_color(*BG_DARK)
+    pdf.rect(0, 0, 210, 297, "F")
 
-    # ── Título ──
-    pdf.set_font("Helvetica", "B", 24)
-    pdf.set_text_color(*RED)
-    pdf.set_xy(10, 12)
-    pdf.cell(0, 12, "PRESUPUESTO", new_x="LMARGIN", new_y="NEXT")
-    pdf.set_font("Helvetica", "", 10)
-    pdf.set_text_color(*MID_GRAY)
-    pdf.set_x(10)
-    pdf.cell(0, 5, f"STLFiles  //  {quote.timestamp[:10]}", new_x="LMARGIN", new_y="NEXT")
+    # barra cyan superior
+    pdf._accent_bar(0, 3)
 
-    y = pdf.get_y() + 2
-    y = pdf._red_bar(y)
+    # titulo
+    pdf.set_font("Helvetica", "B", 26)
+    pdf.set_text_color(*WHITE)
+    pdf.set_xy(14, 10)
+    pdf.cell(0, 12, "PRESUPUESTO")
+    pdf.set_font("Helvetica", "", 9)
+    pdf.set_text_color(*SLATE_500)
+    pdf.set_xy(14, 23)
+    pdf.cell(0, 5, f"STLFiles  |  {quote.timestamp[:10]}")
+
+    y = 32
+    y = pdf._accent_bar(y)
     y += 4
 
-    # ── Captura del modelo + Dimensiones ──
+    # ── Captura + Dimensiones ──
     img_bytes = _decode_image(quote.image_base64)
     if img_bytes:
         try:
-            pdf.image(io.BytesIO(img_bytes), x=10, y=y, w=70)
-            #Marco rojo alrededor de la imagen
-            pdf.set_draw_color(*RED)
-            pdf.set_line_width(1.2)
-            pdf.rect(10, y, 70, 52, "D")
+            pdf.image(io.BytesIO(img_bytes), x=14, y=y, w=65)
+            pdf.set_draw_color(*CYAN)
+            pdf.set_line_width(0.6)
+            pdf.rect(14, y, 65, 49, "D")
             pdf.set_line_width(0.2)
         except Exception:
             img_bytes = None
 
-    x_info = 85 if img_bytes else 10
+    x_info = 86 if img_bytes else 14
 
-    # Dimensiones
     if quote.dims_mm and len(quote.dims_mm) == 3:
-        pdf.set_font("Helvetica", "B", 10)
-        pdf.set_text_color(*BLACK)
-        pdf.set_xy(x_info, y + 2)
-        pdf.cell(0, 6, "DIMENSIONES", new_x="LMARGIN", new_y="NEXT")
-        pdf.set_font("Helvetica", "", 18)
-        pdf.set_text_color(*RED)
-        pdf.set_x(x_info)
-        dims = quote.dims_mm
-        pdf.cell(0, 10,
-                 f"{dims[0]:.1f} x {dims[1]:.1f} x {dims[2]:.1f} mm",
-                 new_x="LMARGIN", new_y="NEXT")
-        pdf.set_text_color(*BLACK)
+        d = quote.dims_mm
+        pdf.set_font("Helvetica", "", 8)
+        pdf.set_text_color(*SLATE_500)
+        pdf.set_xy(x_info, y + 1)
+        pdf.cell(0, 5, "DIMENSIONES")
+        pdf.set_font("Helvetica", "B", 16)
+        pdf.set_text_color(*WHITE)
+        pdf.set_xy(x_info, y + 7)
+        pdf.cell(0, 9, f"{d[0]:.1f}  x  {d[1]:.1f}  x  {d[2]:.1f}  mm")
+        y_dims = y + 18
+    else:
+        y_dims = y
 
-    # Modelo
     model = quote.config_snapshot.get("model_name", "")
     if model:
-        pdf.set_font("Helvetica", "B", 10)
-        pdf.set_xy(x_info, pdf.get_y() + 2)
-        pdf.cell(0, 6, f"MODELO: {model}", new_x="LMARGIN", new_y="NEXT")
+        pdf.set_font("Helvetica", "B", 9)
+        pdf.set_text_color(*SLATE_300)
+        pdf.set_xy(x_info, y_dims + 1)
+        pdf.cell(0, 5, model)
+        y_dims += 8
 
     if img_bytes:
-        y = y + 56
+        y = max(y + 53, y_dims + 2)
     else:
-        y = pdf.get_y() + 4
+        y = y_dims + 4
 
     # ── Datos de impresion ──
-    y = pdf._section_title("Datos de Impresion", y)
-    y += 2
+    y = pdf._section("Datos de Impresion", y)
+    y += 1
     hrs = int(quote.total_hours)
     mins = int((quote.total_hours - hrs) * 60)
     diff_label, diff_desc, diff_pct = _diff_detail(quote.difficulty)
 
-    label_val = [
-        ("Tiempo", f"{hrs}h {mins}min"),
-        ("Material", f"{quote.grams:.0f} g"),
-        ("Dimensiones", f"{quote.dims_mm[0]:.1f} x {quote.dims_mm[1]:.1f} x {quote.dims_mm[2]:.1f} mm" if len(quote.dims_mm) == 3 else "-"),
-    ]
-    for lbl, val in label_val:
-        pdf.set_font("Helvetica", "", 9)
-        pdf.set_text_color(*MID_GRAY)
-        pdf.set_xy(14, y)
-        pdf.cell(40, 5, lbl)
-        pdf.set_font("Helvetica", "B", 9)
-        pdf.set_text_color(*BLACK)
-        pdf.set_x(55)
-        pdf.cell(0, 5, val, new_x="LMARGIN", new_y="NEXT")
-        y += 6
+    y = pdf._row("Tiempo", f"{hrs}h {mins}min", y, value_size=10, value_font="B")
+    y = pdf._row("Material", f"{quote.grams:.0f} g", y, value_size=10, value_font="B")
+    if quote.dims_mm and len(quote.dims_mm) == 3:
+        d = quote.dims_mm
+        y = pdf._row("Dimensiones", f"{d[0]:.1f} x {d[1]:.1f} x {d[2]:.1f} mm", y)
 
-    # Dificultad
-    y += 2
-    pdf.set_font("Helvetica", "B", 9)
-    pdf.set_text_color(*MID_GRAY)
-    pdf.set_xy(14, y)
-    pdf.cell(40, 5, "Dificultad")
-    pdf.set_font("Helvetica", "B", 9)
-    pdf.set_text_color(*RED)
-    pdf.set_x(55)
-    pdf.cell(0, 5, f"{diff_label}  (recargo {diff_pct})", new_x="LMARGIN", new_y="NEXT")
-    y += 6
-    pdf.set_font("Helvetica", "", 8)
-    pdf.set_text_color(*MID_GRAY)
-    pdf.set_x(55)
-    pdf.cell(0, 4, diff_desc, new_x="LMARGIN", new_y="NEXT")
+    # dificultad
+    y += 1
+    y = pdf._row("Dificultad", f"{diff_label}  ({diff_pct})", y,
+                  value_color=CYAN, value_font="B")
+    pdf.set_font("Helvetica", "", 7)
+    pdf.set_text_color(*SLATE_500)
+    pdf.set_xy(66, y)
+    pdf.cell(0, 4, diff_desc)
+    y += 5
     if quote.extra_difficulty > 0:
-        pdf.set_x(55)
-        pdf.set_text_color(*RED)
-        pdf.cell(0, 4, f"+{_fmt(quote.extra_difficulty)} al subtotal", new_x="LMARGIN", new_y="NEXT")
-    y = pdf.get_y() + 4
+        pdf.set_xy(66, y)
+        pdf.set_text_color(*EMERALD)
+        pdf.cell(0, 4, f"+{_fmt(quote.extra_difficulty)} al subtotal")
+        y += 5
+    y += 3
 
-    # ── Desglose de costos ──
-    y = pdf._section_title("Desglose de Costos", y)
+    # ── Desglose ──
+    y = pdf._section("Desglose de Costos", y)
+    y += 1
+
+    y = pdf._row("Costo Tiempo", _fmt(quote.cost_time), y)
+    y = pdf._row("Costo Material", _fmt(quote.cost_material), y)
+
+    # linea sutil antes del subtotal
+    pdf.set_draw_color(*SLATE_700)
+    pdf.set_line_width(0.3)
+    pdf.line(14, y, 196, y)
     y += 2
 
-    cost_rows = [
-        ("COSTO TIEMPO", _fmt(quote.cost_time), False),
-        ("COSTO MATERIAL", _fmt(quote.cost_material), False),
-        ("SUBTOTAL", _fmt(quote.subtotal), True),
-    ]
+    y = pdf._row("Subtotal", _fmt(quote.subtotal), y,
+                  label_color=WHITE, value_color=WHITE,
+                  label_size=10, value_size=10, value_font="B")
+
     if quote.extra_difficulty > 0:
-        cost_rows.append((f"EXTRA DIFICULTAD ({diff_pct})", _fmt(quote.extra_difficulty), False))
+        y = pdf._row(f"Extra Dificultad ({diff_pct})",
+                     _fmt(quote.extra_difficulty), y, value_color=EMERALD)
     if quote.profit > 0:
-        cost_rows.append(("GANANCIA", _fmt(quote.profit), False))
+        y = pdf._row("Ganancia", _fmt(quote.profit), y)
 
-    for lbl, val, is_bold in cost_rows:
-        f = "B" if is_bold else ""
-        pdf.set_font("Helvetica", f, 9 if not is_bold else 10)
-        pdf.set_text_color(*BLACK)
-        pdf.set_xy(14, y)
-        pdf.cell(100, 6, lbl)
-        pdf.set_font("Helvetica", "B", 9 if not is_bold else 10)
-        pdf.set_x(120)
-        pdf.cell(0, 6, val, new_x="LMARGIN", new_y="NEXT")
-        if is_bold:
-            pdf._thick_line(y + 7)
-        y += 8
-
-    # ── PRECIO FINAL — gran bloque rojo ──
+    # ── PRECIO FINAL ──
     y += 6
-    pdf.set_fill_color(*RED)
-    pdf.rect(10, y, 190, 22, "F")
-    # diagonal negra decorativa (simula estilo P5)
-    pdf.set_fill_color(*BLACK)
-    pdf.polygon([(10, y), (40, y), (10, y + 22)], "F")
-    pdf.set_font("Helvetica", "B", 10)
-    pdf.set_text_color(*WHITE)
-    pdf.set_xy(44, y + 2)
-    pdf.cell(0, 7, "PRECIO FINAL")
-    pdf.set_font("Helvetica", "B", 16)
-    pdf.set_xy(44, y + 9)
+    pdf.set_fill_color(*CYAN)
+    pdf.rect(14, y, 182, 20, "F")
+    pdf.set_font("Helvetica", "B", 9)
+    pdf.set_text_color(*BG_DARK)
+    pdf.set_xy(20, y + 2)
+    pdf.cell(0, 6, "PRECIO FINAL")
+    pdf.set_font("Helvetica", "B", 18)
+    pdf.set_xy(20, y + 8)
     pdf.cell(0, 10, _fmt(quote.final_price))
 
-    y += 26
+    y += 24
 
-    # ── Footer config ──
+    # ── Footer ──
     pdf.set_font("Helvetica", "", 7)
-    pdf.set_text_color(*LIGHT_GRAY)
+    pdf.set_text_color(*SLATE_500)
     cfg = quote.config_snapshot
     pdf.set_xy(10, y)
     pdf.cell(0, 4,
-             f"Maquina ${cfg.get('machine_cost', 0):,.0f} / {cfg.get('machine_life_hrs', 0):,.0f}hs  |  "
+             f"Maquina ${cfg.get('machine_cost', 0):,.0f} / "
+             f"{cfg.get('machine_life_hrs', 0):,.0f}hs  |  "
              f"{cfg.get('power_watts', 0)}W @ ${cfg.get('electricity_kwh', 0)}/kWh  |  "
              f"Filamento ${cfg.get('filament_per_kg', 0):,.0f}/kg  |  "
              f"Ganancia {cfg.get('profit_pct', 0)}%",
              new_x="LMARGIN", new_y="NEXT", align="C")
 
-    # barra roja inferior
-    pdf.set_fill_color(*RED)
-    pdf.rect(0, 287, 210, 3, "F")
+    # barra cyan inferior
+    pdf.set_fill_color(*CYAN)
+    pdf.rect(0, 295, 210, 2, "F")
 
     buf = io.BytesIO()
     pdf.output(buf)
@@ -251,70 +237,40 @@ def generate_pdf(quote: QuoteResult) -> bytes:
 
 
 # ═══════════════════════════════════════════════════════════════
-#  PNG — Estilo Persona 5 / Cyberpunk / Neobrutalista
+#  PNG — Estilo oscuro minimalista
 # ═══════════════════════════════════════════════════════════════
-
-def _halftone_overlay(img, color=RED, spacing=8, dot_max=3, opacity=40):
-    """Superpone patron de halftone (dots) al estilo comic/punk."""
-    from PIL import Image, ImageDraw
-    overlay = Image.new("RGBA", img.size, (0, 0, 0, 0))
-    draw_ov = ImageDraw.Draw(overlay)
-    r, g, b = color
-    for yy in range(0, img.size[1], spacing):
-        for xx in range(0, img.size[0], spacing):
-            # variar tamaño de punto segun posicion (efecto degradado)
-            factor = (yy / img.size[1])
-            radius = max(1, int(dot_max * (1 - factor * 0.6)))
-            draw_ov.ellipse(
-                [xx - radius, yy - radius, xx + radius, yy + radius],
-                fill=(r, g, b, opacity),
-            )
-    img.paste(Image.alpha_composite(img.convert("RGBA"), overlay).convert("RGB"))
-    return img
-
-
-def _draw_diagonal_stripes(draw, x0, y0, x1, y1, color=RED, width=3, spacing=12):
-    """Rayas diagonales al estilo Persona 5."""
-    for offset in range(0, (x1 - x0) + (y1 - y0), spacing):
-        draw.line(
-            [(x0 + offset, y0), (x0, y0 + offset)],
-            fill=color, width=width,
-        )
-
 
 def generate_png(quote: QuoteResult) -> bytes:
     from PIL import Image, ImageDraw, ImageFont
 
-    W, H = 640, 580
-    img = Image.new("RGB", (W, H), DARK_BG)
+    W, H = 640, 600
+    img = Image.new("RGB", (W, H), BG_DARK)
     draw = ImageDraw.Draw(img)
 
-    # Fuentes
+    # Fuentes - numeros GRANDES
     try:
-        fb = ImageFont.truetype("/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf", 22)
-        fh = ImageFont.truetype("/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf", 13)
-        fr = ImageFont.truetype("/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf", 11)
-        fbody = ImageFont.truetype("/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf", 11)
-        fsm = ImageFont.truetype("/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf", 9)
-        fbig = ImageFont.truetype("/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf", 20)
-        fprice = ImageFont.truetype("/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf", 26)
+        f_title = ImageFont.truetype("/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf", 26)
+        f_section = ImageFont.truetype("/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf", 12)
+        f_label = ImageFont.truetype("/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf", 11)
+        f_value = ImageFont.truetype("/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf", 13)
+        f_big = ImageFont.truetype("/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf", 18)
+        f_price_label = ImageFont.truetype("/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf", 11)
+        f_price = ImageFont.truetype("/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf", 28)
+        f_small = ImageFont.truetype("/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf", 9)
+        f_dims = ImageFont.truetype("/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf", 22)
     except OSError:
-        fb = fh = fr = fbody = fsm = fbig = fprice = ImageFont.load_default()
+        f_title = f_section = f_label = f_value = f_big = f_price_label = f_price = f_small = f_dims = ImageFont.load_default()
 
-    # ── Barra roja superior ──
-    draw.rectangle([(0, 0), (W, 6)], fill=RED)
-
-    # ── Halftone sutil de fondo ──
-    _halftone_overlay(img, color=RED, spacing=16, dot_max=2, opacity=18)
-    draw = ImageDraw.Draw(img)  # refresco despues del overlay
+    # ── Barra cyan superior ──
+    draw.rectangle([(0, 0), (W, 4)], fill=CYAN)
 
     # ── Titulo ──
-    y = 16
-    draw.text((24, y), "PRESUPUESTO", fill=RED, font=fb)
-    y += 28
-    draw.text((24, y), f"STLFiles  //  {quote.timestamp[:10]}", fill=MID_GRAY, font=fsm)
-    y += 16
-    draw.line([(24, y), (W - 24, y)], fill=RED, width=3)
+    y = 18
+    draw.text((28, y), "PRESUPUESTO", fill=WHITE, font=f_title)
+    y += 32
+    draw.text((28, y), f"STLFiles  |  {quote.timestamp[:10]}", fill=SLATE_500, font=f_small)
+    y += 14
+    draw.line([(28, y), (W - 28, y)], fill=CYAN, width=2)
     y += 8
 
     # ── Captura del modelo ──
@@ -328,30 +284,26 @@ def generate_png(quote: QuoteResult) -> bytes:
             model_img = None
 
     if model_img:
-        img.paste(model_img, (24, y))
-        #Marco rojo
-        draw.rectangle([(22, y - 2), (24 + 182, y + 142)], outline=RED, width=3)
-        # rayas diagonales decorativas en esquina
-        _draw_diagonal_stripes(draw, 24, y, 60, y + 40, color=(*RED, ), width=2, spacing=8)
-        x_info = 220
+        img.paste(model_img, (28, y))
+        draw.rectangle([(26, y - 2), (210, y + 142)], outline=CYAN, width=2)
+        x_info = 224
     else:
-        x_info = 24
+        x_info = 28
 
     # ── Dimensiones ──
     if quote.dims_mm and len(quote.dims_mm) == 3:
         d = quote.dims_mm
-        draw.text((x_info, y + 2), "DIMENSIONES", fill=LIGHT_GRAY, font=fsm)
-        draw.text((x_info, y + 14), f"{d[0]:.1f} x {d[1]:.1f} x {d[2]:.1f}", fill=WHITE, font=fbig)
-        draw.text((x_info, y + 38), "mm", fill=MID_GRAY, font=fsm)
-        y_dims = y + 56
+        draw.text((x_info, y + 2), "DIMENSIONES", fill=SLATE_500, font=f_small)
+        draw.text((x_info, y + 16), f"{d[0]:.1f} x {d[1]:.1f} x {d[2]:.1f}", fill=WHITE, font=f_dims)
+        draw.text((x_info, y + 44), "mm", fill=SLATE_500, font=f_small)
+        y_dims = y + 60
     else:
         y_dims = y + 4
 
-    # Modelo
     model_name = quote.config_snapshot.get("model_name", "")
     if model_name:
-        draw.text((x_info, y_dims), f"MODELO: {model_name}", fill=LIGHT_GRAY, font=fbody)
-        y_dims += 16
+        draw.text((x_info, y_dims), model_name, fill=SLATE_300, font=f_value)
+        y_dims += 18
 
     if model_img:
         y = max(y + 148, y_dims + 4)
@@ -359,8 +311,9 @@ def generate_png(quote: QuoteResult) -> bytes:
         y = y_dims + 4
 
     # ── Datos de impresion ──
-    draw.rectangle([(20, y), (W - 20, y + 18)], fill=BLACK)
-    draw.text((28, y + 3), "DATOS DE IMPRESION", fill=RED, font=fh)
+    # seccion con fondo card
+    draw.rounded_rectangle([(24, y), (W - 24, y + 90)], radius=6, fill=BG_CARD)
+    draw.text((34, y + 6), "DATOS DE IMPRESION", fill=CYAN, font=f_section)
     y += 24
 
     hrs = int(quote.total_hours)
@@ -368,70 +321,60 @@ def generate_png(quote: QuoteResult) -> bytes:
     diff_label, diff_desc, diff_pct = _diff_detail(quote.difficulty)
 
     for lbl, val in [("Tiempo", f"{hrs}h {mins}min"), ("Material", f"{quote.grams:.0f} g")]:
-        draw.text((32, y), lbl, fill=MID_GRAY, font=fbody)
-        draw.text((140, y), val, fill=WHITE, font=fr)
-        y += 16
+        draw.text((40, y), lbl, fill=SLATE_400, font=f_label)
+        draw.text((180, y), val, fill=WHITE, font=f_value)
+        y += 20
 
-    # Dimensiones en datos
     if quote.dims_mm and len(quote.dims_mm) == 3:
         d = quote.dims_mm
-        draw.text((32, y), "Dimensiones", fill=MID_GRAY, font=fbody)
-        draw.text((140, y), f"{d[0]:.1f} x {d[1]:.1f} x {d[2]:.1f} mm", fill=WHITE, font=fr)
-        y += 16
+        draw.text((40, y), "Dimensiones", fill=SLATE_400, font=f_label)
+        draw.text((180, y), f"{d[0]:.1f} x {d[1]:.1f} x {d[2]:.1f} mm", fill=WHITE, font=f_value)
+        y += 20
 
-    # Dificultad
-    draw.text((32, y), "Dificultad", fill=MID_GRAY, font=fbody)
-    draw.text((140, y), f"{diff_label}  (recargo {diff_pct})", fill=RED, font=fr)
-    y += 14
-    draw.text((140, y), diff_desc, fill=MID_GRAY, font=fsm)
+    # dificultad
+    draw.text((40, y), "Dificultad", fill=SLATE_400, font=f_label)
+    draw.text((180, y), f"{diff_label}  ({diff_pct})", fill=CYAN, font=f_value)
+    y += 18
+    draw.text((180, y), diff_desc, fill=SLATE_500, font=f_small)
     y += 12
     if quote.extra_difficulty > 0:
-        draw.text((140, y), f"+{_fmt(quote.extra_difficulty)} al subtotal", fill=GOLD, font=fsm)
-        y += 14
-    y += 4
+        draw.text((180, y), f"+{_fmt(quote.extra_difficulty)} al subtotal", fill=EMERALD, font=f_small)
+        y += 12
+
+    y += 8
 
     # ── Desglose ──
-    draw.line([(24, y), (W - 24, y)], fill=RED, width=2)
-    y += 6
-    draw.text((28, y), "DESGLOSE DE COSTOS", fill=RED, font=fh)
-    y += 20
+    draw.text((28, y), "DESGLOSE DE COSTOS", fill=CYAN, font=f_section)
+    y += 22
 
     cost_rows = [
-        ("COSTO TIEMPO", _fmt(quote.cost_time), False),
-        ("COSTO MATERIAL", _fmt(quote.cost_material), False),
-        ("SUBTOTAL", _fmt(quote.subtotal), True),
+        ("Costo Tiempo", _fmt(quote.cost_time), False),
+        ("Costo Material", _fmt(quote.cost_material), False),
     ]
     if quote.extra_difficulty > 0:
-        cost_rows.append((f"EXTRA DIFICULTAD ({diff_pct})", _fmt(quote.extra_difficulty), False))
+        cost_rows.append((f"Extra Dificultad ({diff_pct})", _fmt(quote.extra_difficulty), False))
     if quote.profit > 0:
-        cost_rows.append(("GANANCIA", _fmt(quote.profit), False))
+        cost_rows.append(("Ganancia", _fmt(quote.profit), False))
 
-    for lbl, val, is_bold in cost_rows:
-        f = fr if is_bold else fbody
-        c = WHITE if is_bold else LIGHT_GRAY
-        draw.text((32, y), lbl, fill=c, font=f)
-        draw.text((380, y), val, fill=WHITE if is_bold else GOLD, font=f)
-        y += 18
-        if is_bold:
-            draw.line([(32, y - 2), (W - 32, y - 2)], fill=RED, width=2)
+    for lbl, val, _ in cost_rows:
+        draw.text((36, y), lbl, fill=SLATE_400, font=f_label)
+        draw.text((400, y), val, fill=SLATE_300, font=f_value)
+        y += 20
 
-    # ── PRECIO FINAL — gran bloque rojo con diagonal negra ──
-    y += 10
-    # Fondo rojo
-    draw.rectangle([(20, y), (W - 20, y + 56)], fill=RED)
-    # Triangulo negro decorativo (estilo P5)
-    draw.polygon([(20, y), (70, y), (20, y + 56)], fill=BLACK)
-    # Rayas diagonales en el triangulo
-    _draw_diagonal_stripes(draw, 20, y, 70, y + 56, color=RED, width=1, spacing=6)
+    # subtotal
+    draw.line([(36, y), (W - 36, y)], fill=SLATE_700, width=1)
+    y += 4
+    draw.text((36, y), "Subtotal", fill=WHITE, font=f_value)
+    draw.text((400, y), _fmt(quote.subtotal), fill=WHITE, font=f_big)
+    y += 26
 
-    draw.text((80, y + 8), "PRECIO FINAL", fill=WHITE, font=fh)
-    draw.text((80, y + 28), _fmt(quote.final_price), fill=WHITE, font=fprice)
+    # ── PRECIO FINAL ──
+    draw.rounded_rectangle([(24, y), (W - 24, y + 60)], radius=8, fill=CYAN)
+    draw.text((40, y + 10), "PRECIO FINAL", fill=BG_DARK, font=f_price_label)
+    draw.text((40, y + 28), _fmt(quote.final_price), fill=BG_DARK, font=f_price)
 
-    # ── Barra roja inferior ──
-    draw.rectangle([(0, H - 4), (W, H)], fill=RED)
-
-    # ── Halftone sutil encima de todo (efecto comic) ──
-    # ya aplicado al inicio
+    # ── Barra cyan inferior ──
+    draw.rectangle([(0, H - 3), (W, H)], fill=CYAN)
 
     buf = io.BytesIO()
     img.save(buf, format="PNG")
