@@ -8,6 +8,7 @@ import {
   initScene,
   loadSTL,
   planePreview,
+  renderer,
   resize,
   updatePlanePreview,
 } from "./scene.js";
@@ -554,6 +555,10 @@ document.addEventListener("change", () => {
 /* --- Presupuesto --- */
 
 function collectQuoteInput() {
+  let image_base64 = "";
+  try {
+    image_base64 = renderer.domElement.toDataURL("image/png").split(",")[1] || "";
+  } catch { /* ignore */ }
   return {
     hours: Number($("quote-hours").value) || 0,
     minutes: Number($("quote-minutes").value) || 0,
@@ -561,6 +566,8 @@ function collectQuoteInput() {
     difficulty: Number($("quote-difficulty").value) || 1,
     model_name: state.info?.name || "",
     notes: "",
+    dims_mm: state.info?.dims_mm || [],
+    image_base64,
   };
 }
 

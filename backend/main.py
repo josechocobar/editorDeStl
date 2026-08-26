@@ -88,6 +88,8 @@ class QuoteInputModel(BaseModel):
     difficulty: float = Field(default=1.0, ge=1.0, le=3.0)
     model_name: str = ""
     notes: str = ""
+    dims_mm: list[float] = Field(default_factory=list)
+    image_base64: str = ""
 
 
 _ID_RE = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._ -]{0,79}$")

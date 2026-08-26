@@ -21,7 +21,7 @@ export function initScene(canvas) {
   camera = new THREE.PerspectiveCamera(45, 1, 0.1, 5000);
   camera.position.set(120, 90, 140);
 
-  renderer = new THREE.WebGLRenderer({ canvas, antialias: true });
+  renderer = new THREE.WebGLRenderer({ canvas, antialias: true, preserveDrawingBuffer: true });
   renderer.setPixelRatio(Math.min(devicePixelRatio, 2));
 
   controls = new OrbitControls(camera, renderer.domElement);

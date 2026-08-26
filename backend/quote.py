@@ -40,6 +40,8 @@ class QuoteInput:
     difficulty: float = 1.0             # 1.0 simple, 1.5 media, 2.0 compleja
     model_name: str = ""
     notes: str = ""
+    dims_mm: list[float] = field(default_factory=list)  # [x, y, z] en mm
+    image_base64: str = ""             # captura del modelo (data URL o base64 puro)
 
     @property
     def total_hours(self) -> float:
@@ -63,6 +65,8 @@ class QuoteResult:
     total_hours: float = 0
     grams: float = 0
     difficulty: float = 1.0
+    dims_mm: list[float] = field(default_factory=list)
+    image_base64: str = ""
     timestamp: str = ""
     config_snapshot: dict = field(default_factory=dict)
 
@@ -106,6 +110,8 @@ def calculate_quote(config: QuoteConfig, inp: QuoteInput) -> QuoteResult:
         total_hours=inp.total_hours,
         grams=inp.grams,
         difficulty=inp.difficulty,
+        dims_mm=inp.dims_mm,
+        image_base64=inp.image_base64,
         timestamp=datetime.now(timezone.utc).isoformat(),
         config_snapshot={
             "machine_cost": config.machine_cost,
