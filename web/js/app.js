@@ -181,6 +181,7 @@ function adoptModel(info) {
   loadOriginal(`/api/models/${info.id}/preview`);
   refreshSuggestion();
   persistSession();
+  recalcFromSTL();
 }
 
 async function upload(file) {
