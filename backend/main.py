@@ -18,6 +18,7 @@ from pydantic import BaseModel, Field
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
 from backend import connectors, mesh_ops, supports
+from backend.quote import QuoteConfig, QuoteInput, calculate_quote
 
 logging.basicConfig(
     level=logging.DEBUG,
@@ -64,6 +65,29 @@ class CutRequest(CutParams):
     model_id: str
     connector: ConnectorSpec = ConnectorSpec()
     supports: Optional[SupportsSpec] = None
+
+
+# --- Presupuesto ---
+
+
+class QuoteConfigModel(BaseModel):
+    machine_cost: float = Field(default=329_000, ge=0)
+    machine_life_hrs: float = Field(default=8_760, gt=0)
+    electricity_kwh: float = Field(default=50, ge=0)
+    power_watts: float = Field(default=150, ge=0)
+    maintenance_per_hr: float = Field(default=10, ge=0)
+    labor_per_hr: float = Field(default=3_000, ge=0)
+    filament_per_kg: float = Field(default=12_000, ge=0)
+    profit_pct: float = Field(default=30, ge=0, le=500)
+
+
+class QuoteInputModel(BaseModel):
+    hours: float = Field(default=0, ge=0)
+    minutes: float = Field(default=0, ge=0, lt=60)
+    grams: float = Field(default=0, ge=0)
+    difficulty: float = Field(default=1.0, ge=1.0, le=3.0)
+    model_name: str = ""
+    notes: str = ""
 
 
 _ID_RE = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._ -]{0,79}$")
@@ -359,6 +383,50 @@ def get_job_zip(job_id: str):
         content=buf.getvalue(),
         media_type="application/zip",
         headers={"Content-Disposition": f'attachment; filename="{safe_name}_{suffix}.zip"'},
+    )
+
+
+# --- Presupuesto ---
+
+
+class QuoteRequest(BaseModel):
+    config: QuoteConfigModel = QuoteConfigModel()
+    input: QuoteInputModel = QuoteInputModel()
+
+
+@app.post("/api/quote")
+def api_quote(req: QuoteRequest):
+    config = QuoteConfig(**req.config.model_dump())
+    data = QuoteInput(**req.input.model_dump())
+    result = calculate_quote(config, data)
+    return result.to_dict()
+
+
+@app.post("/api/quote/pdf")
+def api_quote_pdf(req: QuoteRequest):
+    from backend.pdf_quote import generate_pdf
+    config = QuoteConfig(**req.config.model_dump())
+    data = QuoteInput(**req.input.model_dump())
+    result = calculate_quote(config, data)
+    pdf_bytes = generate_pdf(result)
+    return Response(
+        content=pdf_bytes,
+        media_type="application/pdf",
+        headers={"Content-Disposition": 'attachment; filename="presupuesto.pdf"'},
+    )
+
+
+@app.post("/api/quote/png")
+def api_quote_png(req: QuoteRequest):
+    from backend.pdf_quote import generate_png
+    config = QuoteConfig(**req.config.model_dump())
+    data = QuoteInput(**req.input.model_dump())
+    result = calculate_quote(config, data)
+    png_bytes = generate_png(result)
+    return Response(
+        content=png_bytes,
+        media_type="image/png",
+        headers={"Content-Disposition": 'attachment; filename="presupuesto.png"'},
     )
 
 

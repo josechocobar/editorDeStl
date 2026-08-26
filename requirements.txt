@@ -9,4 +9,6 @@ networkx
 shapely
 rtree
 fast-simplification>=0.1.7
+fpdf2>=2.7
+Pillow>=10.0
 pytest

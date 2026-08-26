@@ -11,6 +11,9 @@ def test_app_imports_and_routes_register():
     assert "/api/cut" in paths
     assert "/api/models/{model_id}/supports" in paths
     assert "/api/models/{model_id}/suggest-connector" in paths
+    assert "/api/quote" in paths
+    assert "/api/quote/pdf" in paths
+    assert "/api/quote/png" in paths
 
 
 def test_suggest_connector_query_params_accepted():
@@ -174,3 +177,49 @@ def test_delete_traversal_id_rejected():
     client = get_client()
     resp = client.delete("/api/models/..%2F..%2Fetc%2Fpasswd")
     assert resp.status_code in (400, 404, 405)
+
+
+# --- presupuesto ---
+
+def test_quote_returns_json():
+    client = get_client()
+    body = {"config": {}, "input": {"hours": 2, "minutes": 30, "grams": 150, "difficulty": 1.5}}
+    resp = client.post("/api/quote", json=body)
+    assert resp.status_code == 200
+    data = resp.json()
+    assert "final_price" in data
+    assert data["final_price"] > 0
+    assert data["total_hours"] == 2.5
+
+
+def test_quote_defaults():
+    client = get_client()
+    resp = client.post("/api/quote", json={})
+    assert resp.status_code == 200
+    data = resp.json()
+    assert data["final_price"] == 0
+
+
+def test_quote_pdf():
+    client = get_client()
+    body = {"config": {}, "input": {"hours": 1, "grams": 100}}
+    resp = client.post("/api/quote/pdf", json=body)
+    assert resp.status_code == 200
+    assert resp.headers["content-type"] == "application/pdf"
+    assert len(resp.content) > 100
+
+
+def test_quote_png():
+    client = get_client()
+    body = {"config": {}, "input": {"hours": 1, "grams": 100}}
+    resp = client.post("/api/quote/png", json=body)
+    assert resp.status_code == 200
+    assert resp.headers["content-type"] == "image/png"
+    assert len(resp.content) > 100
+
+
+def test_quote_invalid_difficulty():
+    client = get_client()
+    body = {"input": {"difficulty": 99}}
+    resp = client.post("/api/quote", json=body)
+    assert resp.status_code == 422

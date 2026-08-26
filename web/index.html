@@ -57,6 +57,10 @@
             <input type="radio" name="op" value="supports" />
             <span>Solo soportes</span>
           </label>
+          <label class="radio-pill">
+            <input type="radio" name="op" value="quote" />
+            <span>Presupuesto</span>
+          </label>
         </div>
 
         <div id="cut-controls">
@@ -166,6 +170,116 @@
         </div>
 
         <button id="btn-cut" class="primary" disabled>Cortar modelo</button>
+      </section>
+
+      <section class="card hidden" id="quote-card">
+        <h2>3 · Calculadora de Costos</h2>
+
+        <div class="row modes">
+          <label class="radio-pill">
+            <input type="radio" name="quote-mode" value="manual" checked />
+            <span>Manual</span>
+          </label>
+          <label class="radio-pill">
+            <input type="radio" name="quote-mode" value="stl" />
+            <span>Desde STL</span>
+          </label>
+        </div>
+
+        <div id="quote-stl-info" class="hidden">
+          <p class="hint" id="quote-stl-model">Modelo cargado: —</p>
+          <div class="field">
+            <label class="lbl" for="quote-stl-vol">Volumen (cm³) <output id="quote-stl-vol-out">—</output></label>
+            <input type="number" id="quote-stl-vol" min="0" step="0.1" placeholder="auto del modelo" />
+          </div>
+          <div class="field">
+            <label class="lbl" for="quote-stl-weight">Peso estimado (g) <output id="quote-stl-weight-out">—</output></label>
+            <input type="number" id="quote-stl-weight" min="0" step="1" placeholder="auto del modelo" />
+          </div>
+          <p class="hint">Densidad PLA: 1.24 g/cm³. Editá el peso si usás otro material.</p>
+          <hr />
+        </div>
+
+        <div id="quote-input-fields">
+          <div class="grid2">
+            <div class="field">
+              <label class="lbl" for="quote-hours">Tiempo (horas)</label>
+              <input type="number" id="quote-hours" min="0" step="0.5" value="0" />
+            </div>
+            <div class="field">
+              <label class="lbl" for="quote-minutes">Tiempo (minutos)</label>
+              <input type="number" id="quote-minutes" min="0" max="59" step="1" value="0" />
+            </div>
+            <div class="field" id="quote-grams-field">
+              <label class="lbl" for="quote-grams">Material (gramos)</label>
+              <input type="number" id="quote-grams" min="0" step="1" value="0" />
+            </div>
+            <div class="field">
+              <label class="lbl" for="quote-difficulty">Dificultad</label>
+              <select id="quote-difficulty">
+                <option value="1.0">Simple x1.0</option>
+                <option value="1.5">Media x1.5</option>
+                <option value="2.0">Compleja x2.0</option>
+              </select>
+            </div>
+          </div>
+        </div>
+
+        <hr />
+        <details id="quote-config-toggle">
+          <summary class="lbl">Configuracion de costos</summary>
+          <div id="quote-config-fields" class="grid2">
+            <div class="field">
+              <label class="lbl" for="q-cfg-machine">Costo maquina ($)</label>
+              <input type="number" id="q-cfg-machine" min="0" step="1000" />
+            </div>
+            <div class="field">
+              <label class="lbl" for="q-cfg-life">Vida util (horas)</label>
+              <input type="number" id="q-cfg-life" min="1" step="100" />
+            </div>
+            <div class="field">
+              <label class="lbl" for="q-cfg-kwh">Valor kWh ($)</label>
+              <input type="number" id="q-cfg-kwh" min="0" step="1" />
+            </div>
+            <div class="field">
+              <label class="lbl" for="q-cfg-watts">Potencia (W)</label>
+              <input type="number" id="q-cfg-watts" min="0" step="10" />
+            </div>
+            <div class="field">
+              <label class="lbl" for="q-cfg-maint">Mantenimiento ($/hr)</label>
+              <input type="number" id="q-cfg-maint" min="0" step="1" />
+            </div>
+            <div class="field">
+              <label class="lbl" for="q-cfg-labor">Mano de obra ($/hr)</label>
+              <input type="number" id="q-cfg-labor" min="0" step="100" />
+            </div>
+            <div class="field">
+              <label class="lbl" for="q-cfg-filament">Filamento ($/kg)</label>
+              <input type="number" id="q-cfg-filament" min="0" step="100" />
+            </div>
+            <div class="field">
+              <label class="lbl" for="q-cfg-profit">Ganancia (%)</label>
+              <input type="number" id="q-cfg-profit" min="0" max="500" step="1" />
+            </div>
+          </div>
+          <button id="btn-cfg-save" class="secondary" style="margin-top:10px">Guardar configuracion</button>
+          <span id="cfg-saved-msg" class="hint"></span>
+        </details>
+
+        <hr />
+        <div id="quote-results">
+          <div class="qr-row"><span>Costo Tiempo:</span><span id="qr-time">$ 0.00</span></div>
+          <div class="qr-row"><span>Costo Material:</span><span id="qr-material">$ 0.00</span></div>
+          <div class="qr-row qr-sub"><span>Subtotal:</span><span id="qr-subtotal">$ 0.00</span></div>
+          <div class="qr-row" id="qr-diff-row"><span>Extra Dificultad:</span><span id="qr-diff">$ 0.00</span></div>
+          <div class="qr-row" id="qr-profit-row"><span>Ganancia:</span><span id="qr-profit">$ 0.00</span></div>
+          <div class="qr-row qr-total"><span>Precio Final:</span><span id="qr-final">$ 0.00</span></div>
+        </div>
+
+        <div class="row modes" style="margin-top:12px">
+          <button id="btn-quote-pdf" class="secondary" style="flex:1">PDF</button>
+          <button id="btn-quote-png" class="secondary" style="flex:1">PNG</button>
+        </div>
       </section>
 
       <section class="card hidden" id="results-card">

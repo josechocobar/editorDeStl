@@ -13,6 +13,7 @@ import {
 } from "./scene.js";
 import { deleteModel, listModels, suggestConnector, uploadModel } from "./api.js";
 import { OPERATIONS } from "./operations.js";
+import { quoteCalc, loadConfig, saveConfig, formatCurrency, downloadPDF, downloadPNG } from "./quote.js";
 
 const $ = (id) => document.getElementById(id);
 
@@ -256,13 +257,19 @@ function persistSession() {
 }
 
 function updateOperationUI() {
-  const cutting = currentOp() === "cut";
+  const op = currentOp();
+  const cutting = op === "cut";
+  const quoting = op === "quote";
   $("cut-controls").classList.toggle("hidden", !cutting);
   $("sup-toggle-field").classList.toggle("hidden", !cutting);
   $("sup-fields").classList.toggle("hidden", cutting ? !$("sup-enabled").checked : false);
+  $("btn-cut").classList.toggle("hidden", quoting);
+  $("quote-card").classList.toggle("hidden", !quoting);
+  $("results-card").classList.toggle("hidden", quoting || !$("results-card").dataset.hasResults);
   $("btn-cut").textContent = cutting ? "Cortar modelo" : "Generar soportes";
   updatePlanePreviewFromState();
   if (cutting) refreshSuggestion();
+  if (quoting) initQuote();
 }
 
 document.querySelectorAll('input[name="op"]').forEach((r) =>
@@ -344,6 +351,7 @@ $("btn-cut").addEventListener("click", async () => {
 });
 
 function renderResults(job) {
+  $("results-card").dataset.hasResults = "1";
   $("results-title").textContent = job.pieces.length > 1 || currentOp() === "cut"
     ? "3 · Piezas"
     : "3 · Resultado";
@@ -524,6 +532,118 @@ document.addEventListener("input", () => {
 document.addEventListener("change", () => {
   clearTimeout(persistTimer);
   persistTimer = setTimeout(persistSession, 300);
+});
+
+/* --- Presupuesto --- */
+
+function collectQuoteInput() {
+  return {
+    hours: Number($("quote-hours").value) || 0,
+    minutes: Number($("quote-minutes").value) || 0,
+    grams: Number($("quote-grams").value) || 0,
+    difficulty: Number($("quote-difficulty").value) || 1,
+    model_name: state.info?.name || "",
+    notes: "",
+  };
+}
+
+function collectQuoteConfig() {
+  return {
+    machine_cost: Number($("q-cfg-machine").value) || 0,
+    machine_life_hrs: Number($("q-cfg-life").value) || 1,
+    electricity_kwh: Number($("q-cfg-kwh").value) || 0,
+    power_watts: Number($("q-cfg-watts").value) || 0,
+    maintenance_per_hr: Number($("q-cfg-maint").value) || 0,
+    labor_per_hr: Number($("q-cfg-labor").value) || 0,
+    filament_per_kg: Number($("q-cfg-filament").value) || 0,
+    profit_pct: Number($("q-cfg-profit").value) || 0,
+  };
+}
+
+function updateQuoteResults() {
+  const config = collectQuoteConfig();
+  const input = collectQuoteInput();
+  const r = quoteCalc(config, input);
+  $("qr-time").textContent = formatCurrency(r.cost_time);
+  $("qr-material").textContent = formatCurrency(r.cost_material);
+  $("qr-subtotal").textContent = formatCurrency(r.subtotal);
+  $("qr-diff").textContent = formatCurrency(r.extra_difficulty);
+  $("qr-profit").textContent = formatCurrency(r.profit);
+  $("qr-final").textContent = formatCurrency(r.final_price);
+  $("qr-diff-row").style.display = r.extra_difficulty > 0 ? "" : "none";
+  $("qr-profit-row").style.display = r.profit > 0 ? "" : "none";
+}
+
+function populateQuoteConfig(cfg) {
+  $("q-cfg-machine").value = cfg.machine_cost;
+  $("q-cfg-life").value = cfg.machine_life_hrs;
+  $("q-cfg-kwh").value = cfg.electricity_kwh;
+  $("q-cfg-watts").value = cfg.power_watts;
+  $("q-cfg-maint").value = cfg.maintenance_per_hr;
+  $("q-cfg-labor").value = cfg.labor_per_hr;
+  $("q-cfg-filament").value = cfg.filament_per_kg;
+  $("q-cfg-profit").value = cfg.profit_pct;
+}
+
+function initQuote() {
+  const cfg = loadConfig();
+  populateQuoteConfig(cfg);
+  updateQuoteResults();
+}
+
+document.querySelectorAll('input[name="quote-mode"]').forEach((r) =>
+  r.addEventListener("change", () => {
+    const stl = document.querySelector('input[name="quote-mode"]:checked').value === "stl";
+    $("quote-stl-info").classList.toggle("hidden", !stl);
+    $("quote-grams-field").classList.toggle("hidden", stl);
+    if (stl && state.info) {
+      const vol = state.info.volume_cm3 || 0;
+      const weight = Math.round(vol * 1.24);
+      $("quote-stl-model").textContent = `Modelo: ${state.info.name}`;
+      $("quote-stl-vol").value = vol;
+      $("quote-stl-vol-out").textContent = vol.toFixed(1);
+      $("quote-stl-weight").value = weight;
+      $("quote-stl-weight-out").textContent = weight;
+      $("quote-grams").value = weight;
+      updateQuoteResults();
+    }
+  })
+);
+
+["quote-hours", "quote-minutes", "quote-grams", "quote-difficulty",
+ "q-cfg-machine", "q-cfg-life", "q-cfg-kwh", "q-cfg-watts",
+ "q-cfg-maint", "q-cfg-labor", "q-cfg-filament", "q-cfg-profit"].forEach((id) => {
+  $(id)?.addEventListener("input", updateQuoteResults);
+});
+
+$("quote-stl-weight")?.addEventListener("input", () => {
+  $("quote-grams").value = $("quote-stl-weight").value;
+  updateQuoteResults();
+});
+
+$("btn-cfg-save")?.addEventListener("click", () => {
+  saveConfig(collectQuoteConfig());
+  const msg = $("cfg-saved-msg");
+  msg.textContent = "Guardado";
+  setTimeout(() => { msg.textContent = ""; }, 2000);
+});
+
+$("btn-quote-pdf")?.addEventListener("click", async () => {
+  try {
+    await downloadPDF(collectQuoteConfig(), collectQuoteInput());
+    toast("PDF descargado");
+  } catch (err) {
+    toast(String(err.message || err), "error");
+  }
+});
+
+$("btn-quote-png")?.addEventListener("click", async () => {
+  try {
+    await downloadPNG(collectQuoteConfig(), collectQuoteInput());
+    toast("PNG descargado");
+  } catch (err) {
+    toast(String(err.message || err), "error");
+  }
 });
 
 refreshLibrary();

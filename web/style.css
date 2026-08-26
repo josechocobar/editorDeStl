@@ -189,6 +189,21 @@ a.secondary { background: var(--card); border: 1px solid var(--accent); color: v
 .lib-btn.del:hover { border-color: var(--err); color: var(--err); }
 #lib-list:empty::after { content: "Ninguno"; color: var(--muted); font-size: 11px; }
 
+/* Quote / Calculadora */
+#quote-results { margin-top: 8px; }
+.qr-row { display: flex; justify-content: space-between; padding: 6px 0; font-size: 13px; border-bottom: 1px solid var(--border); }
+.qr-row:last-child { border-bottom: none; }
+.qr-row span:first-child { color: var(--muted); }
+.qr-row span:last-child { font-weight: 600; font-variant-numeric: tabular-nums; }
+.qr-row.qr-sub { border-top: 1px solid var(--border); padding-top: 8px; margin-top: 4px; font-weight: 600; }
+.qr-row.qr-total { background: var(--accent); color: #fff; margin: 8px -14px -14px; padding: 12px 14px; border-radius: 0 0 10px 10px; font-size: 15px; font-weight: 700; }
+.qr-row.qr-total span:last-child { color: #fff; font-size: 17px; }
+
+#quote-config-toggle summary { cursor: pointer; user-select: none; }
+#quote-config-toggle summary::-webkit-details-marker { display: none; }
+#quote-config-toggle summary::before { content: "\25B6"; display: inline-block; margin-right: 6px; font-size: 9px; transition: transform .15s; }
+#quote-config-toggle[open] summary::before { transform: rotate(90deg); }
+
 .hidden { display: none !important; }
 
 @media (max-width: 760px) {
