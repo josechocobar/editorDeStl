@@ -182,12 +182,19 @@ a.secondary { background: var(--card); border: 1px solid var(--accent); color: v
 #lib-list { list-style: none; padding: 0; margin: 0; max-height: 180px; overflow-y: auto; }
 #lib-list li { display: flex; align-items: center; gap: 6px; padding: 5px 0; border-bottom: 1px solid var(--border); font-size: 12px; }
 #lib-list li:last-child { border-bottom: none; }
+.lib-check { accent-color: var(--accent); flex-shrink: 0; cursor: pointer; }
 .lib-name { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--text); }
 .lib-meta { font-size: 10px; color: var(--muted); margin-left: 4px; }
 .lib-btn { background: transparent; border: 1px solid var(--border); color: var(--muted); padding: 2px 8px; border-radius: 4px; cursor: pointer; font-size: 11px; flex-shrink: 0; }
 .lib-btn:hover { border-color: var(--accent); color: var(--accent); }
 .lib-btn.del:hover { border-color: var(--err); color: var(--err); }
 #lib-list:empty::after { content: "Ninguno"; color: var(--muted); font-size: 11px; }
+
+.selected-list { max-height: 100px; overflow-y: auto; margin: 4px 0 8px; }
+.sel-model { display: flex; justify-content: space-between; padding: 3px 0; font-size: 11px; border-bottom: 1px solid var(--border); }
+.sel-model:last-child { border-bottom: none; }
+.sel-name { color: var(--text); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; flex: 1; }
+.sel-dims { color: var(--muted); font-size: 10px; margin-left: 8px; flex-shrink: 0; }
 
 /* Quote / Calculadora */
 #quote-results { margin-top: 8px; }

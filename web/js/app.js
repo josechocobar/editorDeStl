@@ -31,6 +31,7 @@ const state = {
   originalMesh: null,
   pieceMeshes: [],
   axis: "z",
+  selectedModels: [],  // [{id, name, dims_mm, volume_cm3}]
 };
 
 const SESSION_KEY = "stlfiles.session.v1";
@@ -485,7 +486,9 @@ function renderLibrary(items) {
     const li = document.createElement("li");
     li.dataset.id = m.id;
     const dims = m.dims_mm ? m.dims_mm.map((d) => Math.round(d)).join("×") : "—";
+    const checked = state.selectedModels.some((s) => s.id === m.id) ? "checked" : "";
     li.innerHTML = `
+      <input type="checkbox" class="lib-check" data-id="${m.id}" ${checked} />
       <span class="lib-name">${m.name}</span>
       <span class="lib-meta">${dims} mm</span>
       <button class="lib-btn" data-act="load">Abrir</button>
@@ -542,6 +545,41 @@ $("lib-list").addEventListener("click", async (e) => {
   }
 });
 
+$("lib-list").addEventListener("change", async (e) => {
+  if (!e.target.classList.contains("lib-check")) return;
+  const id = e.target.dataset.id;
+  if (!id) return;
+  if (e.target.checked) {
+    const items = await listModels();
+    const info = items.find((m) => m.id === id);
+    if (info && !state.selectedModels.some((s) => s.id === id)) {
+      state.selectedModels.push({
+        id: info.id,
+        name: info.name,
+        dims_mm: info.dims_mm || [],
+        volume_cm3: info.volume_cm3 || 0,
+      });
+    }
+  } else {
+    state.selectedModels = state.selectedModels.filter((s) => s.id !== id);
+  }
+  updateSelectedSummary();
+  recalcFromSTL();
+});
+
+function updateSelectedSummary() {
+  const el = $("quote-selected-list");
+  if (!el) return;
+  if (state.selectedModels.length === 0) {
+    el.innerHTML = '<span class="hint">Ninguno seleccionado</span>';
+    return;
+  }
+  el.innerHTML = state.selectedModels.map((m) => {
+    const dims = m.dims_mm?.map((d) => Math.round(d)).join("×") || "—";
+    return `<div class="sel-model"><span class="sel-name">${m.name}</span><span class="sel-dims">${dims} mm</span></div>`;
+  }).join("");
+}
+
 let persistTimer = null;
 document.addEventListener("input", () => {
   clearTimeout(persistTimer);
@@ -559,15 +597,35 @@ function collectQuoteInput() {
   try {
     image_base64 = captureScreenshot();
   } catch { /* ignore */ }
+
+  const multiInfo = $("quote-multi-info");
+  const isMulti = multiInfo && !multiInfo.classList.contains("hidden");
+
+  let model_name = "";
+  let dims_mm = [];
+  if (isMulti && state.selectedModels.length > 0) {
+    model_name = state.selectedModels.map((m) => m.name).join(" + ");
+    dims_mm = [];
+  } else {
+    model_name = state.info?.name || "";
+    dims_mm = state.info?.dims_mm || [];
+  }
+
   return {
     hours: Number($("quote-hours").value) || 0,
     minutes: Number($("quote-minutes").value) || 0,
     grams: Number($("quote-grams").value) || 0,
     difficulty: Number($("quote-difficulty").value) || 1,
-    model_name: state.info?.name || "",
+    model_name,
     notes: "",
-    dims_mm: state.info?.dims_mm || [],
+    dims_mm,
     image_base64,
+    models: isMulti ? state.selectedModels.map((m) => ({
+      name: m.name,
+      dims_mm: m.dims_mm,
+      volume_cm3: m.volume_cm3,
+      weight_g: Math.round(calcWeight(m.volume_cm3) * 10) / 10,
+    })) : [],
   };
 }
 
@@ -586,19 +644,53 @@ function collectQuoteConfig() {
 
 function recalcFromSTL() {
   const isSTL = document.querySelector('input[name="quote-mode"]:checked')?.value === "stl";
-  if (!isSTL || !state.info) return;
-  const vol = state.info.volume_cm3 || 0;
-  const weight = Math.round(calcWeight(vol) * 10) / 10;
-  $("quote-stl-vol").value = vol;
-  $("quote-stl-weight").value = weight;
-  $("quote-grams").value = weight;
-  const infill = Number($("q-infill").value) || 20;
-  const layer = Number($("q-layer").value) || 0.2;
-  const speed = Number($("q-speed").value) || 60;
-  const hours = calcTimeHours(vol, infill, layer, speed);
-  $("q-time").value = formatTime(hours);
-  $("quote-hours").value = Math.floor(hours);
-  $("quote-minutes").value = Math.round((hours - Math.floor(hours)) * 60);
+  if (!isSTL) return;
+
+  const hasMulti = state.selectedModels.length > 0;
+  const multiInfo = $("quote-multi-info");
+  const singleInfo = document.querySelector("#quote-stl-info > .grid2");
+
+  if (hasMulti) {
+    // modo multi-modelo
+    if (multiInfo) multiInfo.classList.remove("hidden");
+    if (singleInfo) singleInfo.classList.add("hidden");
+
+    let totalVol = 0;
+    state.selectedModels.forEach((m) => { totalVol += m.volume_cm3 || 0; });
+    const totalWeight = Math.round(calcWeight(totalVol) * 10) / 10;
+
+    $("quote-multi-count").textContent = state.selectedModels.length;
+    $("quote-multi-vol").value = totalVol;
+    $("quote-multi-weight").value = totalWeight;
+    $("quote-grams").value = totalWeight;
+
+    const infill = Number($("q-infill").value) || 20;
+    const layer = Number($("q-layer").value) || 0.2;
+    const speed = Number($("q-speed").value) || 60;
+    const hours = calcTimeHours(totalVol, infill, layer, speed);
+    $("q-time").value = formatTime(hours);
+    $("quote-hours").value = Math.floor(hours);
+    $("quote-minutes").value = Math.round((hours - Math.floor(hours)) * 60);
+    $("quote-stl-model").textContent = `${state.selectedModels.length} modelos seleccionados`;
+  } else if (state.info) {
+    // modo single
+    if (multiInfo) multiInfo.classList.add("hidden");
+    if (singleInfo) singleInfo.classList.remove("hidden");
+
+    const vol = state.info.volume_cm3 || 0;
+    const weight = Math.round(calcWeight(vol) * 10) / 10;
+    $("quote-stl-vol").value = vol;
+    $("quote-stl-weight").value = weight;
+    $("quote-grams").value = weight;
+    const infill = Number($("q-infill").value) || 20;
+    const layer = Number($("q-layer").value) || 0.2;
+    const speed = Number($("q-speed").value) || 60;
+    const hours = calcTimeHours(vol, infill, layer, speed);
+    $("q-time").value = formatTime(hours);
+    $("quote-hours").value = Math.floor(hours);
+    $("quote-minutes").value = Math.round((hours - Math.floor(hours)) * 60);
+    $("quote-stl-model").textContent = `Modelo: ${state.info.name}`;
+  }
   updateQuoteResults();
 }
 
@@ -639,8 +731,7 @@ document.querySelectorAll('input[name="quote-mode"]').forEach((r) =>
     const stl = document.querySelector('input[name="quote-mode"]:checked').value === "stl";
     $("quote-stl-info").classList.toggle("hidden", !stl);
     $("quote-grams-field").classList.toggle("hidden", stl);
-    if (stl && state.info) {
-      $("quote-stl-model").textContent = `Modelo: ${state.info.name}`;
+    if (stl) {
       recalcFromSTL();
     }
   })

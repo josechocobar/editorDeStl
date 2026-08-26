@@ -177,6 +177,41 @@ def generate_pdf(quote: QuoteResult) -> bytes:
         y += 5
     y += 3
 
+    # ── Desglose por modelo (multi-modelo) ──
+    if quote.models and len(quote.models) > 1:
+        y = pdf._section("Modelos Seleccionados", y)
+        y += 1
+        # header
+        pdf.set_font("Helvetica", "B", 7)
+        pdf.set_text_color(*SLATE_500)
+        pdf.set_xy(14, y)
+        pdf.cell(60, 4, "MODELO")
+        pdf.set_x(76)
+        pdf.cell(30, 4, "DIMENSIONES")
+        pdf.set_x(108)
+        pdf.cell(25, 4, "VOLUMEN")
+        pdf.set_x(135)
+        pdf.cell(25, 4, "PESO")
+        y += 5
+        pdf.set_draw_color(*SLATE_700)
+        pdf.line(14, y, 196, y)
+        y += 2
+        for m in quote.models:
+            pdf.set_font("Helvetica", "", 7)
+            pdf.set_text_color(*SLATE_300)
+            pdf.set_xy(14, y)
+            pdf.cell(60, 4, (m.get("name", "") or "")[:28])
+            dims = m.get("dims_mm", [])
+            dims_str = f"{dims[0]:.0f}x{dims[1]:.0f}x{dims[2]:.0f}" if len(dims) == 3 else "-"
+            pdf.set_x(76)
+            pdf.cell(30, 4, dims_str)
+            pdf.set_x(108)
+            pdf.cell(25, 4, f"{m.get('volume_cm3', 0):.1f} cm3")
+            pdf.set_x(135)
+            pdf.cell(25, 4, f"{m.get('weight_g', 0):.0f} g")
+            y += 5
+        y += 2
+
     # ── Desglose ──
     y = pdf._section("Desglose de Costos", y)
     y += 1
@@ -243,7 +278,7 @@ def generate_pdf(quote: QuoteResult) -> bytes:
 def generate_png(quote: QuoteResult) -> bytes:
     from PIL import Image, ImageDraw, ImageFont
 
-    W, H = 640, 600
+    W, H = 640, 640
     img = Image.new("RGB", (W, H), BG_DARK)
     draw = ImageDraw.Draw(img)
 
@@ -342,6 +377,27 @@ def generate_png(quote: QuoteResult) -> bytes:
         y += 12
 
     y += 8
+
+    # ── Modelos seleccionados (multi-modelo) ──
+    if quote.models and len(quote.models) > 1:
+        draw.rounded_rectangle([(24, y), (W - 24, y + 14 + len(quote.models) * 16)], radius=6, fill=BG_CARD)
+        draw.text((34, y + 4), "MODELOS SELECCIONADOS", fill=CYAN, font=f_section)
+        y += 20
+        # header
+        draw.text((36, y), "Modelo", fill=SLATE_500, font=f_small)
+        draw.text((260, y), "Dimensiones", fill=SLATE_500, font=f_small)
+        draw.text((380, y), "Vol.", fill=SLATE_500, font=f_small)
+        draw.text((440, y), "Peso", fill=SLATE_500, font=f_small)
+        y += 12
+        for m in quote.models:
+            draw.text((36, y), (m.get("name", "") or "")[:24], fill=SLATE_300, font=f_small)
+            dims = m.get("dims_mm", [])
+            dims_str = f"{dims[0]:.0f}x{dims[1]:.0f}x{dims[2]:.0f}" if len(dims) == 3 else "-"
+            draw.text((260, y), dims_str, fill=SLATE_300, font=f_small)
+            draw.text((380, y), f"{m.get('volume_cm3', 0):.1f}", fill=SLATE_300, font=f_small)
+            draw.text((440, y), f"{m.get('weight_g', 0):.0f}g", fill=SLATE_300, font=f_small)
+            y += 16
+        y += 6
 
     # ── Desglose ──
     draw.text((28, y), "DESGLOSE DE COSTOS", fill=CYAN, font=f_section)

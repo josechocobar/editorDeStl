@@ -90,6 +90,7 @@ class QuoteInputModel(BaseModel):
     notes: str = ""
     dims_mm: list[float] = Field(default_factory=list)
     image_base64: str = ""
+    models: list[dict] = Field(default_factory=list)  # multi-modelo: [{name, dims_mm, volume_cm3, weight_g}]
 
 
 _ID_RE = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._ -]{0,79}$")

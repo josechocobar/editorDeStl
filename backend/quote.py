@@ -42,6 +42,7 @@ class QuoteInput:
     notes: str = ""
     dims_mm: list[float] = field(default_factory=list)  # [x, y, z] en mm
     image_base64: str = ""             # captura del modelo (data URL o base64 puro)
+    models: list[dict] = field(default_factory=list)  # multi-modelo: [{name, dims_mm, volume_cm3, weight_g}]
 
     @property
     def total_hours(self) -> float:
@@ -67,6 +68,7 @@ class QuoteResult:
     difficulty: float = 1.0
     dims_mm: list[float] = field(default_factory=list)
     image_base64: str = ""
+    models: list[dict] = field(default_factory=list)  # multi-modelo
     timestamp: str = ""
     config_snapshot: dict = field(default_factory=dict)
 
@@ -112,6 +114,7 @@ def calculate_quote(config: QuoteConfig, inp: QuoteInput) -> QuoteResult:
         difficulty=inp.difficulty,
         dims_mm=inp.dims_mm,
         image_base64=inp.image_base64,
+        models=inp.models,
         timestamp=datetime.now(timezone.utc).isoformat(),
         config_snapshot={
             "machine_cost": config.machine_cost,
