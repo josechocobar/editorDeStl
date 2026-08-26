@@ -223,3 +223,86 @@ def test_quote_invalid_difficulty():
     body = {"input": {"difficulty": 99}}
     resp = client.post("/api/quote", json=body)
     assert resp.status_code == 422
+
+
+# ── Multi-model quote endpoints ──────────────────────────────────
+
+def _multi_body():
+    return {
+        "config": {},
+        "input": {
+            "hours": 3, "minutes": 45, "grams": 250, "difficulty": 1.5,
+            "dims_mm": [120, 80, 60],
+            "models": [
+                {"name": "piece_A", "dims_mm": [60, 80, 60], "volume_cm3": 50, "weight_g": 62},
+                {"name": "piece_B", "dims_mm": [60, 80, 60], "volume_cm3": 45, "weight_g": 55.8},
+            ],
+        },
+    }
+
+
+def test_quote_multi_model():
+    client = get_client()
+    resp = client.post("/api/quote", json=_multi_body())
+    assert resp.status_code == 200
+    data = resp.json()
+    assert len(data["models"]) == 2
+    assert data["models"][0]["name"] == "piece_A"
+    assert data["models"][1]["name"] == "piece_B"
+    assert data["final_price"] > 0
+
+
+def test_quote_multi_model_to_dict():
+    client = get_client()
+    resp = client.post("/api/quote", json=_multi_body())
+    data = resp.json()
+    assert "dims_mm" in data
+    assert data["dims_mm"] == [120, 80, 60]
+
+
+def test_quote_pdf_multi_model():
+    client = get_client()
+    resp = client.post("/api/quote/pdf", json=_multi_body())
+    assert resp.status_code == 200
+    assert resp.headers["content-type"] == "application/pdf"
+    assert len(resp.content) > 500
+
+
+def test_quote_png_multi_model():
+    client = get_client()
+    resp = client.post("/api/quote/png", json=_multi_body())
+    assert resp.status_code == 200
+    assert resp.headers["content-type"] == "image/png"
+    assert len(resp.content) > 500
+
+
+def test_quote_multi_model_empty_list():
+    client = get_client()
+    body = {"input": {"hours": 1, "grams": 100, "models": []}}
+    resp = client.post("/api/quote", json=body)
+    assert resp.status_code == 200
+    data = resp.json()
+    assert data["models"] == []
+
+
+def test_quote_multi_model_single():
+    client = get_client()
+    body = {
+        "input": {
+            "hours": 1, "grams": 50,
+            "models": [{"name": "only", "dims_mm": [10, 10, 10], "volume_cm3": 1, "weight_g": 1.24}],
+        }
+    }
+    resp = client.post("/api/quote", json=body)
+    assert resp.status_code == 200
+    assert len(resp.json()["models"]) == 1
+
+
+def test_quote_multi_model_100_pieces():
+    models = [{"name": f"p{i}", "dims_mm": [i, i, i], "volume_cm3": i, "weight_g": i * 1.24} for i in range(1, 101)]
+    client = get_client()
+    body = {"input": {"hours": 20, "grams": 5000, "models": models}}
+    resp = client.post("/api/quote", json=body)
+    assert resp.status_code == 200
+    assert len(resp.json()["models"]) == 100
+    assert resp.json()["final_price"] > 0
