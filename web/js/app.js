@@ -260,12 +260,16 @@ function updateOperationUI() {
   const op = currentOp();
   const cutting = op === "cut";
   const quoting = op === "quote";
-  $("cut-controls").classList.toggle("hidden", !cutting);
+  $("cut-controls").classList.toggle("hidden", quoting);
   $("sup-toggle-field").classList.toggle("hidden", !cutting);
   $("sup-fields").classList.toggle("hidden", cutting ? !$("sup-enabled").checked : false);
   $("btn-cut").classList.toggle("hidden", quoting);
   $("quote-card").classList.toggle("hidden", !quoting);
-  $("results-card").classList.toggle("hidden", quoting || !$("results-card").dataset.hasResults);
+  if (!quoting) {
+    $("results-card").classList.toggle("hidden", !$("results-card").dataset.hasResults);
+  } else {
+    $("results-card").classList.add("hidden");
+  }
   $("btn-cut").textContent = cutting ? "Cortar modelo" : "Generar soportes";
   updatePlanePreviewFromState();
   if (cutting) refreshSuggestion();
