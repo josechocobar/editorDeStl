@@ -11,11 +11,12 @@ export let renderer;
 export let controls;
 export let world;
 export let planePreview;
+let scene;
 
 const loader = new STLLoader();
 
 export function initScene(canvas) {
-  const scene = new THREE.Scene();
+  scene = new THREE.Scene();
   scene.background = new THREE.Color(0x0d0f12);
 
   camera = new THREE.PerspectiveCamera(45, 1, 0.1, 5000);
@@ -156,4 +157,15 @@ export function updatePlanePreview(geometry, axis, frac) {
   planePreview.position.set(c.x, c.y, c.z);
   planePreview.position[axis] = lo + frac * span;
   planePreview.visible = true;
+}
+
+export function captureScreenshot(maxWidth = 640) {
+  if (!renderer || !scene || !camera) return "";
+  renderer.render(scene, camera);
+  const canvas = renderer.domElement;
+  if (canvas.width === 0 || canvas.height === 0) return "";
+  const dataUrl = canvas.toDataURL("image/png");
+  const raw = dataUrl.split(",")[1] || "";
+  if (raw.length < 100) return "";
+  return raw;
 }

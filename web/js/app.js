@@ -2,13 +2,13 @@ import * as THREE from "three";
 import {
   PALETTE,
   addMeshFromGeometry,
+  captureScreenshot,
   clearGroup,
   fitCamera,
   fitCameraToPieces,
   initScene,
   loadSTL,
   planePreview,
-  renderer,
   resize,
   updatePlanePreview,
 } from "./scene.js";
@@ -557,7 +557,7 @@ document.addEventListener("change", () => {
 function collectQuoteInput() {
   let image_base64 = "";
   try {
-    image_base64 = renderer.domElement.toDataURL("image/png").split(",")[1] || "";
+    image_base64 = captureScreenshot();
   } catch { /* ignore */ }
   return {
     hours: Number($("quote-hours").value) || 0,
