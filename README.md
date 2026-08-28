@@ -4,6 +4,12 @@ Splitter de modelos 3D estilo MeshMixer en la web: subís un `.stl`, lo cortás 
 con un plano (o en N partes), les agregás conectores de encastre (pin cilíndrico o
 espiga prismática) y/o soportes árbol para minis, y te bajás los STL listos para imprimir.
 
+## Capturas
+
+![Vista del editor 1](./proyecto-1.png)
+
+![Vista del editor 2](./proyecto2.png)
+
 ## Stack
 
 - **Backend**: FastAPI + [trimesh](https://trimesh.org) con motor de booleanos [manifold3d](https://github.com/elalish/manifold)
