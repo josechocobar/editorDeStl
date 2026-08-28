@@ -3,6 +3,7 @@ import {
   PALETTE,
   addMeshFromGeometry,
   captureScreenshot,
+  clearClipPlane,
   clearGroup,
   fitCamera,
   fitCameraToPieces,
@@ -10,6 +11,7 @@ import {
   loadSTL,
   planePreview,
   resize,
+  setClipPlane,
   updatePlanePreview,
 } from "./scene.js";
 import { deleteModel, listModels, suggestConnector, uploadModel } from "./api.js";
@@ -171,10 +173,12 @@ function updatePlanePreviewFromState() {
   const show = state.originalMesh && currentOp() === "cut" && currentMode() === "half";
   if (!show) {
     planePreview.visible = false;
+    clearClipPlane(state.originalMesh);
     return;
   }
   const frac = Number($("pos-slider").value) / 100;
   updatePlanePreview(state.originalMesh.geometry, state.axis, frac);
+  setClipPlane(state.originalMesh, state.axis, frac);
 }
 
 let toastTimer = null;
@@ -415,6 +419,13 @@ $("btn-supports").addEventListener("click", async () => {
   }
 });
 
+function piecePrintTime(volumeCm3) {
+  const infill = Number($("q-infill")?.value) || 20;
+  const layer = Number($("q-layer")?.value) || 0.2;
+  const speed = Number($("q-speed")?.value) || 60;
+  return formatTime(calcTimeHours(volumeCm3, infill, layer, speed));
+}
+
 function renderResults(job) {
   $("results-card").dataset.hasResults = "1";
   $("results-title").textContent = job.pieces.length > 1 || currentOp() === "cut"
@@ -428,7 +439,7 @@ function renderResults(job) {
     li.innerHTML = `
       <div>
         <div class="p-name">${dot}${p.name}</div>
-        <div class="p-meta">${p.dims_mm.map((d) => Math.round(d)).join("×")} mm · ${p.volume_cm3} cm³${p.watertight ? "" : " · ⚠ no estanca"}</div>
+        <div class="p-meta">${p.dims_mm.map((d) => Math.round(d)).join("×")} mm · ${p.volume_cm3} cm³ · ≈${piecePrintTime(p.volume_cm3)}${p.watertight ? "" : " · ⚠ no estanca"}</div>
       </div>
       <a href="${p.file_url}" download="${p.name}">STL</a>`;
     list.appendChild(li);

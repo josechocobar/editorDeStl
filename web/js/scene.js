@@ -24,6 +24,7 @@ export function initScene(canvas) {
 
   renderer = new THREE.WebGLRenderer({ canvas, antialias: true, preserveDrawingBuffer: true });
   renderer.setPixelRatio(Math.min(devicePixelRatio, 2));
+  renderer.localClippingEnabled = true;
 
   controls = new OrbitControls(camera, renderer.domElement);
   controls.enableDamping = true;
@@ -157,6 +158,31 @@ export function updatePlanePreview(geometry, axis, frac) {
   planePreview.position.set(c.x, c.y, c.z);
   planePreview.position[axis] = lo + frac * span;
   planePreview.visible = true;
+}
+
+const clipPlanes = [];
+
+export function setClipPlane(mesh, axis, frac) {
+  clipPlanes.length = 0;
+  if (!mesh || !mesh.geometry) return;
+  let box = mesh.geometry.boundingBox;
+  if (!box) {
+    mesh.geometry.computeBoundingBox();
+    box = mesh.geometry.boundingBox;
+  }
+  const t = box.min[axis] + frac * (box.max[axis] - box.min[axis]);
+  const normal = new THREE.Vector3(0, 0, 0);
+  normal[axis] = 1;
+  clipPlanes.push(new THREE.Plane(normal, -t));
+  const mats = Array.isArray(mesh.material) ? mesh.material : [mesh.material];
+  mats.forEach((m) => (m.clippingPlanes = clipPlanes));
+}
+
+export function clearClipPlane(mesh) {
+  clipPlanes.length = 0;
+  if (!mesh) return;
+  const mats = Array.isArray(mesh.material) ? mesh.material : [mesh.material];
+  mats.forEach((m) => (m.clippingPlanes = null));
 }
 
 export function captureScreenshot(maxWidth = 640) {
