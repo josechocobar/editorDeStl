@@ -1,99 +1,99 @@
 # STLFiles
 
-Splitter de modelos 3D estilo MeshMixer en la web: subís un `.stl`, lo cortás en piezas
-con un plano (o en N partes), les agregás conectores de encastre (pin cilíndrico o
-espiga prismática) y/o soportes árbol para minis, y te bajás los STL listos para imprimir.
+MeshMixer-style 3D model splitter in the browser: upload a `.stl`, split it into parts
+with a plane (or into N pieces), add press-fit connectors (cylindrical pin or
+prismatic peg) and/or tree supports for minis, then download the printer-ready STLs.
 
-## Capturas
+## Screenshots
 
-![Vista del editor 1](./proyecto-1.png)
+![Editor view 1](./proyecto-1.png)
 
-![Vista del editor 2](./proyecto2.png)
+![Editor view 2](./proyecto2.png)
 
 ## Stack
 
-- **Backend**: FastAPI + [trimesh](https://trimesh.org) con motor de booleanos [manifold3d](https://github.com/elalish/manifold)
-- **Frontend**: HTML/CSS/JS puro + Three.js (vendoreado, funciona offline)
+- **Backend**: FastAPI + [trimesh](https://trimesh.org) with [manifold3d](https://github.com/elalish/manifold) boolean engine
+- **Frontend**: plain HTML/CSS/JS + Three.js (vendored, works offline)
 
-## Levantar con Docker
+## Run with Docker
 
 ```bash
 docker compose up --build
 ```
 
-Abrir http://localhost:8321 — los datos quedan en `./data` (montado como volumen).
+Open http://localhost:8321 — data lives in `./data` (mounted as a volume).
 
-### Configuración (opcional)
+### Configuration (optional)
 
 ```bash
-cp .env.example .env   # después editás .env a gusto
+cp .env.example .env   # then edit .env to your liking
 ```
 
-| Variable | Default | Qué hace |
-|----------|---------|----------|
-| `STLFILES_PORT` | `8321` | Puerto del host donde se publica la app |
-| `STLFILES_DATA` | `./data` | Dónde se guardan uploads y jobs |
+| Variable | Default | Purpose |
+|----------|---------|---------|
+| `STLFILES_PORT` | `8321` | Host port the app is published on |
+| `STLFILES_DATA` | `./data` | Where uploads and jobs are stored |
 
-## Levantar en local (dev)
+## Run locally (dev)
 
 ```bash
 python3 -m pip install -r requirements.txt
 python3 -m uvicorn backend.main:app --reload --port 8321
 ```
 
-## Uso
+## Usage
 
-1. **Modelo**: arrastrás el `.stl`.
-2. **Operación**:
-   - *Cortar en piezas*: plano (eje + posición, con preview en vivo) o N partes;
-     conectores de encastre opcionales; soportes opcionales por pieza.
-   - *Solo soportes*: genera soportes árbol sobre el modelo entero.
-3. **Resultado**: STL de cada pieza para descargar individualmente o todo junto en un ZIP.
+1. **Model**: drag-and-drop the `.stl`.
+2. **Operation**:
+   - *Split into parts*: plane (axis + position, with live preview) or N pieces;
+     optional press-fit connectors; optional per-piece supports.
+   - *Supports only*: generates tree supports over the whole model.
+3. **Result**: one STL per piece, downloadable individually or all together as a ZIP.
 
-## Cómo funciona el corte
+## How the split works
 
-| Modo | Qué hace |
-|------|----------|
-| **Mitad (plano)** | Elegís eje X/Y/Z y posición del plano; lo ves en vivo como plano rojo translúcido. Corta en 2 con tapa (`cap=True`), siempre watertight. |
-| **Varias partes** | Elegís 2–16 partes; se divide recursivamente cada pieza por su eje más largo (kd-tree), registrando qué par de piezas nace de cada corte. |
+| Mode | What it does |
+|------|--------------|
+| **Half (plane)** | Pick the X/Y/Z axis and plane position; see it live as a translucent red plane. Splits into 2 with a cap (`cap=True`), always watertight. |
+| **Several parts** | Pick 2–16 parts; each piece is recursively divided along its longest axis (kd-tree), recording which pair of pieces each cut produces. |
 
-### Conectores
+### Connectors
 
-Cada corte genera sitios de encastre sobre la cara de corte (grilla dentro del área
-útil, con margen de seguridad):
+Each cut generates connector sites on the cut face (grid within the usable area,
+with a safety margin):
 
-- **Pin**: cilindro que sobresale de una pieza + agujero en la otra.
-- **Prisma**: espiga cuadrada + cavidad cuadrada.
+- **Pin**: cylinder protruding from one piece + hole in the other.
+- **Prism**: square peg + square cavity.
 
-Parámetros: diámetro/lado, profundidad de enchufe, holgura (el agujero se agranda
-`2 × holgura`, default `0.25 mm` pensado para FDM) y cantidad por corte.
+Parameters: diameter/side, plug depth, clearance (the hole is enlarged by
+`2 × clearance`, default `0.25 mm` tuned for FDM) and count per cut.
 
-Si un conector falla (cara muy chica, booleano raro), la API lo omite y lo reporta en
-`warnings` — las piezas salen iguales, sin encastre en ese corte.
+If a connector fails (face too small, tricky boolean), the API skips it and reports
+it in `warnings` — the pieces come out the same, just without a connector on that cut.
 
-### Soportes para minis
+### Supports for minis
 
-Soportes estilo árbol (reglas R1–R10 en `docs/investigacion-soportes.md`): puntas
-cónicas con z-gap sobre los voladizos, columnas que bajan y se fusionan, y una base
-común donde llega la cama. Parámetros: ángulo de voladizo, diámetros de punta/contacto,
-separación, z-gap y espesor de base.
+Tree-style supports (rules R1–R10 in `docs/investigacion-soportes.md`): tapered tips
+with z-gap over overhangs, columns that descend and merge, and a common base where
+they reach the build bed. Parameters: overhang angle, tip/contact diameters,
+spacing, z-gap and base thickness.
 
-Si un voladizo tiene material debajo (propio de la pieza), la columna descansa sobre
-él en vez de bajar hasta la base.
+If an overhang has material beneath it (part of the model), the column rests on it
+instead of going all the way down to the base.
 
 ## API
 
-| Endpoint | Descripción |
+| Endpoint | Description |
 |----------|-------------|
-| `POST /api/models` | Upload STL (multipart) → info: medidas, volumen, triángulos |
-| `GET /api/models/{id}/file` | STL original |
-| `GET /api/models/{id}/preview` | STL decimado para el visor (cacheado) |
-| `GET /api/models/{id}/suggest-connector` | Sugerencia de pin según la cara de corte |
-| `POST /api/models/{id}/supports` | Soportes sobre el modelo entero → job de 1 pieza |
-| `POST /api/cut` | Corte (+ conectores/soportes opcionales) → job con piezas, splits y warnings |
-| `GET /api/jobs/{job}/pieces/{i}` | STL de una pieza |
-| `GET /api/jobs/{job}/pieces/{i}/preview` | Preview decimado de una pieza |
-| `GET /api/jobs/{job}/zip` | ZIP con las piezas + `{corte\|soportes}_info.json` |
+| `POST /api/models` | Upload STL (multipart) → info: dimensions, volume, triangles |
+| `GET /api/models/{id}/file` | Original STL |
+| `GET /api/models/{id}/preview` | Decimated STL for the viewer (cached) |
+| `GET /api/models/{id}/suggest-connector` | Pin suggestion based on the cut face |
+| `POST /api/models/{id}/supports` | Supports over the whole model → 1-piece job |
+| `POST /api/cut` | Split (+ optional connectors/supports) → job with pieces, splits and warnings |
+| `GET /api/jobs/{job}/pieces/{i}` | STL of one piece |
+| `GET /api/jobs/{job}/pieces/{i}/preview` | Decimated preview of one piece |
+| `GET /api/jobs/{job}/zip` | ZIP with the pieces + `{cut\|supports}_info.json` |
 
 ## Tests
 
@@ -101,20 +101,20 @@ Si un voladizo tiene material debajo (propio de la pieza), la columna descansa s
 python3 -m pytest tests/ -q
 ```
 
-## Estructura
+## Structure
 
 ```
 backend/
-  main.py        FastAPI: upload, corte, soportes, descargas, static
-  mesh_ops.py    carga, info, corte por plano, split recursivo, previews
-  connectors.py  sitios de encastre + primitivas pin/prisma + booleanos
-  supports.py    detección de voladizos + árbol de soportes + base común
-web/             index.html, style.css, js/ (ES modules), vendor/ (three.js local)
-tests/           pytest del motor de corte, conectores, soportes y API
-samples/         STLs de ejemplo para probar
-docs/            investigación y reglas de soportes
-problemas/       bug log: un md por bug resuelto
-data/            uploads y jobs (gitignoreado)
+  main.py        FastAPI: upload, split, supports, downloads, static
+  mesh_ops.py    loading, info, plane split, recursive split, previews
+  connectors.py  connector sites + pin/prism primitives + booleans
+  supports.py    overhang detection + support tree + common base
+web/             index.html, style.css, js/ (ES modules), vendor/ (local three.js)
+tests/           pytest for the split engine, connectors, supports and API
+samples/         example STLs for testing
+docs/            support research and rules
+problemas/       bug log: one md per resolved bug
+data/            uploads and jobs (gitignored)
 ```
 
-Más detalle técnico para contribuir: [`AGENTS.md`](AGENTS.md).
+More technical detail for contributors: [`AGENTS.md`](AGENTS.md).
